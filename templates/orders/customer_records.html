@@ -7,22 +7,87 @@
         <h4 class="mb-0">Customer Directory</h4>
         <p class="text-muted">Review client contact data and unified booking metrics</p>
     </div>
-    <button class="btn btn-dark">+ New Customer</button>
+    <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#newCustomerModal">+ New Customer</button>
 </div>
+
+{% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<form method="get" class="mb-3">
+    <input
+        type="text"
+        name="q"
+        class="form-control"
+        style="max-width: 500px;"
+        placeholder="Search customers by name, company, email, phone..."
+        value="{{ query }}"
+        onchange="this.form.submit()"
+    >
+</form>
+
 <table class="table">
     <thead>
-        <tr><th>Account / Contact Name</th><th>Email Address</th><th>Phone Number</th><th>Corporate Entity</th><th>History Activity</th></tr>
+        <tr>
+            <th>Account / Contact Name</th>
+            <th>Contact Info</th>
+            <th>Corporate Entity</th>
+            <th>History Activity</th>
+        </tr>
     </thead>
     <tbody>
         {% for customer in customers %}
         <tr>
             <td>{{ customer.name }}</td>
             <td>{{ customer.contact_info }}</td>
-            <td>—</td>
             <td>{{ customer.account_type }}</td>
             <td><a href="{% url 'orders:customer_order_history' customer.customer_id %}">Order History</a></td>
         </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-muted text-center py-4">No customers found.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+
+<div class="modal fade" id="newCustomerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">New Customer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Account / Contact Name</label>
+                        {{ form.name }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Contact Info</label>
+                        {{ form.contact_info }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Corporate Entity Type</label>
+                        {{ form.account_type }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-dark">Save Customer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if form.errors %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        new bootstrap.Modal(document.getElementById("newCustomerModal")).show();
+    });
+</script>
+{% endif %}
 {% endblock %}

@@ -1,6 +1,9 @@
-from django.shortcuts import get_object_or_404, render
+from django.contrib import messages
+from django.db import models
+from django.shortcuts import get_object_or_404, redirect, render
 
 from core.permissions import sales_agent_required
+from orders.forms import CustomerForm
 from orders.models import Customer, Order
 
 
@@ -26,14 +29,40 @@ def order_detail(request, order_id):
 @sales_agent_required
 def customer_records(request):
     """Figure 3.7d: Sales Agent — Customer Records."""
+    if request.method == "POST":
+        form = CustomerForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Customer added successfully.")
+            return redirect("orders:customer_records")
+    else:
+        form = CustomerForm()
+
+    query = request.GET.get("q", "").strip()
     customers = Customer.objects.all()
-    return render(request, "orders/customer_records.html", {"customers": customers})
+    if query:
+        customers = customers.filter(
+            models.Q(name__icontains=query)
+            | models.Q(contact_info__icontains=query)
+            | models.Q(account_type__icontains=query)
+        )
+
+    return render(
+        request,
+        "orders/customer_records.html",
+        {"customers": customers, "form": form, "query": query},
+    )
 
 
 @sales_agent_required
 def customer_order_history(request, customer_id):
     customer = get_object_or_404(Customer, pk=customer_id)
-    return render(request, "orders/customer_order_history.html", {"customer": customer})
+    orders = customer.orders.all()
+    return render(
+        request,
+        "orders/customer_order_history.html",
+        {"customer": customer, "orders": orders},
+    )
 
 
 @sales_agent_required
