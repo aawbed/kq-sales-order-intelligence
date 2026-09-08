@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block page_title %}Customer Directory{% endblock %}
+{% block sidebar %}{% include "partials/sidebar_sales_agent.html" %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="mb-0">Customer Directory</h4>
+        <p class="text-muted">Review client contact data and unified booking metrics</p>
+    </div>
+    <button class="btn btn-dark">+ New Customer</button>
+</div>
+<table class="table">
+    <thead>
+        <tr><th>Account / Contact Name</th><th>Email Address</th><th>Phone Number</th><th>Corporate Entity</th><th>History Activity</th></tr>
+    </thead>
+    <tbody>
+        {% for customer in customers %}
+        <tr>
+            <td>{{ customer.name }}</td>
+            <td>{{ customer.contact_info }}</td>
+            <td>—</td>
+            <td>{{ customer.account_type }}</td>
+            <td><a href="{% url 'orders:customer_order_history' customer.customer_id %}">Order History</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

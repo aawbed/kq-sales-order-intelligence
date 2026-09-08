@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block page_title %}Customer Order History{% endblock %}
+{% block sidebar %}{% include "partials/sidebar_sales_agent.html" %}{% endblock %}
+{% block content %}
+<h4>{{ customer.name }} — Order History</h4>
+{# TODO: list customer.orders.all #}
+{% endblock %}

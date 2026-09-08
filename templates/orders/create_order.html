@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block page_title %}Create New Order{% endblock %}
+{% block sidebar %}{% include "partials/sidebar_sales_agent.html" %}{% endblock %}
+{% block content %}
+<h4>Sales Order Form</h4>
+<p class="text-muted">Prepare a new customer booking/cargo order record</p>
+<div class="card">
+    <div class="card-body">
+        <label class="form-label fw-semibold">Customer / Account Selector</label>
+        <select class="form-select mb-3">
+            <option>Select an account...</option>
+        </select>
+        <table class="table">
+            <thead>
+                <tr><th>Product / Service Line Item</th><th>Qty</th><th>Unit Price (USD)</th><th>Line Total (USD)</th><th></th></tr>
+            </thead>
+            <tbody>
+                {# TODO: dynamic order item rows #}
+            </tbody>
+        </table>
+        <button class="btn btn-outline-secondary btn-sm">+ Add Item Line</button>
+        <div class="text-end mt-3">
+            <div>Subtotal: <span class="fw-semibold">$0.00</span></div>
+            <div>VAT (16%): <span class="fw-semibold">$0.00</span></div>
+            <div class="fs-5">Running Total (USD): <span class="fw-bold">$0.00</span></div>
+        </div>
+        <div class="text-end mt-3">
+            <button class="btn btn-outline-secondary">Reset Form</button>
+            <button class="btn btn-dark">Submit Order</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

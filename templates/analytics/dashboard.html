@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block page_title %}Sales & ML Intelligence Dashboard{% endblock %}
+{% block sidebar %}{% include "partials/sidebar_operations_manager.html" %}{% endblock %}
+{% block content %}
+<h4>Executive Demand Analytics</h4>
+<p class="text-muted">Live booking trends consolidated with automated demand forecasting anomalies</p>
+
+<div class="row g-3 mb-3">
+    <div class="col"><div class="card card-body"><div class="text-muted small">TOTAL SALES (MTD)</div><div class="fs-4 fw-bold">$0.00</div></div></div>
+    <div class="col"><div class="card card-body"><div class="text-muted small">ORDERS THIS WEEK</div><div class="fs-4 fw-bold">0 bookings</div></div></div>
+    <div class="col"><div class="card card-body"><div class="text-muted small">LOW-STOCK ALERTS</div><div class="fs-4 fw-bold text-danger">0 critical items</div></div></div>
+    <div class="col"><div class="card card-body"><div class="text-muted small">ACTIVE CUSTOMERS</div><div class="fs-4 fw-bold">0 Accounts</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-8">
+        <div class="card card-body mb-3">
+            <div class="fw-semibold mb-2">Cargo Sales Demand Trend (USD)</div>
+            <div class="border rounded p-5 text-center text-muted">{# TODO: chart via static/js/dashboard-charts.js #}</div>
+        </div>
+        <div class="card card-body">
+            <div class="fw-semibold mb-2">Top Selling Cargo Sectors</div>
+            <div class="border rounded p-5 text-center text-muted">{# TODO: chart #}</div>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="card card-body">
+            <div class="fw-semibold mb-2">ML Anomaly Detector</div>
+            <p class="text-muted small">Real-time pattern tracking from incoming orders vs predictive seasonal averages.</p>
+            {# TODO: populate from analytics.ml.anomaly_detection.detect_anomalies() #}
+        </div>
+    </div>
+</div>
+{% endblock %}

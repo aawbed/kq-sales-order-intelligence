@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block page_title %}Stock Levels Manager{% endblock %}
+{% block sidebar %}{% include "partials/sidebar_warehouse_officer.html" %}{% endblock %}
+{% block content %}
+<h4>Warehouse Stock Inventory</h4>
+<p class="text-muted">Monitor, reorder, and adjust physical cargo container levels and packing components</p>
+<table class="table">
+    <thead>
+        <tr><th>Product / Component Name</th><th>SKU Code</th><th>Qty on Hand</th><th>Reorder Level</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+        {% for item in stock %}
+        <tr>
+            <td>{{ item.product.name }}</td>
+            <td>—</td>
+            <td class="{% if item.is_low %}text-danger fw-semibold{% endif %}">
+                {{ item.quantity_on_hand }} units{% if item.is_low %} (LOW){% endif %}
+            </td>
+            <td>{{ item.reorder_level }} units</td>
+            <td>
+                <button class="btn btn-dark btn-sm" data-bs-toggle="modal" data-bs-target="#adjustStockModal">Adjust Stock</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="modal fade" id="adjustStockModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Adjust Stock Quantity</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {# TODO: adjustment form — current qty, offset, reason #}
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-dark">Save Adjustment</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

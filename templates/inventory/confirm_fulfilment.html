@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block page_title %}Warehouse Fulfilment Queue{% endblock %}
+{% block sidebar %}{% include "partials/sidebar_warehouse_officer.html" %}{% endblock %}
+{% block content %}
+<h4>Pending Order Queue</h4>
+<p class="text-muted">Verify payload specs and confirm stock package dispatch</p>
+<table class="table">
+    <thead>
+        <tr><th>Order Ref ID</th><th>Customer Account</th><th>Payload Items Breakdown</th><th>Logistics Date</th><th>Dispatch Action</th></tr>
+    </thead>
+    <tbody>
+        {% for order in orders %}
+        <tr>
+            <td>KQ-{{ order.order_id }}</td>
+            <td>{{ order.customer.name }}</td>
+            <td>{# TODO: item breakdown #}</td>
+            <td>{{ order.order_date|date:"M d, Y" }}</td>
+            <td>
+                <form method="post" action="{% url 'inventory:confirm_order' order.order_id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-dark btn-sm">Confirm Fulfilled</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

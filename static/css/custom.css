@@ -1,0 +1,17 @@
+/* Custom overrides on top of Bootstrap for the KQ Sales & Order
+   Intelligence System. Kept minimal for now — extend as the UI
+   moves from wireframe fidelity to final styling. */
+
+body {
+    background-color: #f4f5f6;
+}
+
+.nav-link {
+    color: #333;
+}
+
+.nav-link.active,
+.nav-link:hover {
+    color: #000;
+    font-weight: 600;
+}

@@ -1,0 +1,22 @@
+# Core framework
+Django==4.2.30
+python-dotenv==1.0.1
+
+# Data tier (MySQL) — see config/settings.py DB_ENGINE switch
+mysqlclient==2.2.4
+
+# Frontend asset handling / static files (optional, if using WhiteNoise in prod)
+whitenoise==6.6.0
+
+# Machine Learning pipeline (analytics/ml/)
+scikit-learn==1.5.0
+pandas==2.2.2
+numpy==1.26.4
+statsmodels==0.14.2
+
+# PDF invoice generation (orders/services/invoice_service.py)
+reportlab==4.2.0
+
+# Development / testing
+pytest==8.2.2
+pytest-django==4.8.0

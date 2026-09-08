@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block page_title %}Generate Invoice Billing{% endblock %}
+{% block sidebar %}{% include "partials/sidebar_sales_agent.html" %}{% endblock %}
+{% block content %}
+<h4>Invoice Billing Statement</h4>
+<p class="text-muted">Review order charges and generate formal PDF document</p>
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between mb-3">
+            <div>
+                <div class="text-muted small">BILLING STATEMENT</div>
+                <h5>Invoice No: #INV-{{ order.order_id }}</h5>
+            </div>
+            <button class="btn btn-dark">Generate PDF</button>
+        </div>
+        <div class="row mb-3">
+            <div class="col">
+                <div class="text-muted small">BILLED TO:</div>
+                <div class="fw-semibold">{{ order.customer.name }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted small">BOOKING META:</div>
+                <div>Order Reference: KQ-{{ order.order_id }}</div>
+            </div>
+        </div>
+        <table class="table">
+            <thead>
+                <tr><th>Description of Services</th><th>Qty</th><th>Unit Price (USD)</th><th>Total Amount (USD)</th></tr>
+            </thead>
+            <tbody>
+                {% for item in order.items.all %}
+                <tr>
+                    <td>{{ item.product.name }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.unit_price }}</td>
+                    <td>{{ item.line_total }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
