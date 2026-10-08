@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block page_title %}Staff Profile & Account Settings{% endblock %}
+
+{% block sidebar %}
+    {% if user.role.role_name == "system_administrator" or user.is_superuser %}
+        {% include "partials/sidebar_system_administrator.html" %}
+    {% elif user.role.role_name == "operations_manager" %}
+        {% include "partials/sidebar_operations_manager.html" %}
+    {% elif user.role.role_name == "warehouse_officer" %}
+        {% include "partials/sidebar_warehouse_officer.html" %}
+    {% else %}
+        {% include "partials/sidebar_sales_agent.html" %}
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="kq-page-header mb-4">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h4 class="fw-bold mb-1"><i class="bi bi-person-badge me-2" style="color: var(--kq-primary);"></i>Staff Account &amp; Profile</h4>
+            <p class="text-muted mb-0">Manage your personal credentials, contact details, and security password</p>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Staff Identity Summary Card -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-body text-center p-4">
+                <div class="d-inline-flex align-items-center justify-content-center rounded-circle text-white mb-3 shadow"
+                     style="width: 80px; height: 80px; background: linear-gradient(135deg, var(--kq-primary) 0%, #b3001e 100%); font-size: 2rem; font-weight: 700;">
+                    {{ profile_user.first_name|first|default:profile_user.username|first|upper }}
+                </div>
+                <h5 class="fw-bold mb-1">{{ profile_user.get_full_name|default:profile_user.username }}</h5>
+                <p class="text-muted small mb-2">@{{ profile_user.username }}</p>
+
+                <div class="mb-3">
+                    {% if profile_user.role %}
+                    <span class="badge px-3 py-2" style="background: var(--kq-info-bg); color: var(--kq-info); font-size: 0.85rem; font-weight: 600;">
+                        <i class="bi bi-shield-check me-1"></i>{{ profile_user.role.get_role_name_display }}
+                    </span>
+                    {% else %}
+                    <span class="badge bg-secondary px-3 py-2">No Assigned Role</span>
+                    {% endif %}
+                </div>
+
+                <div class="text-start border-top pt-3 mt-3">
+                    <div class="d-flex justify-content-between py-1 small">
+                        <span class="text-muted">Account Status:</span>
+                        <span class="fw-semibold text-success"><i class="bi bi-check-circle-fill me-1"></i>Active</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 small">
+                        <span class="text-muted">Member Since:</span>
+                        <span class="fw-semibold">{{ profile_user.date_joined|date:"M d, Y" }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 small">
+                        <span class="text-muted">Last Login:</span>
+                        <span class="fw-semibold">{{ profile_user.last_login|date:"M d, H:i"|default:"First Session" }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 small">
+                        <span class="text-muted">Role Permissions:</span>
+                        <span class="text-muted font-monospace" style="font-size: 0.75rem;">Enterprise RBAC</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-light border-0 text-center py-3">
+                <small class="text-muted">
+                    <i class="bi bi-lock me-1"></i>Role changes require System Administrator approval.
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forms Column -->
+    <div class="col-lg-8">
+        <!-- Edit Personal Details -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-person-gear me-2" style="color: var(--kq-primary);"></i>Personal &amp; Contact Details</h6>
+            </div>
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="update_profile" value="1">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">First Name</label>
+                            <input type="text" class="form-control" name="first_name" value="{{ profile_user.first_name }}" placeholder="e.g. John">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">Last Name</label>
+                            <input type="text" class="form-control" name="last_name" value="{{ profile_user.last_name }}" placeholder="e.g. Doe">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Official Email Address</label>
+                            <input type="email" class="form-control" name="email" value="{{ profile_user.email }}" placeholder="e.g. staff@kenya-airways.com">
+                            <div class="form-text small">Used for order alerts, system notices, and report exports.</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-end">
+                        <button type="submit" class="btn btn-dark px-4">
+                            <i class="bi bi-check2-circle me-1"></i>Save Profile Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Security & Password Management -->
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-shield-lock me-2 text-danger"></i>Security &amp; Password Update</h6>
+            </div>
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="change_password" value="1">
+                    
+                    {% if pwd_form.errors %}
+                    <div class="alert alert-danger py-2 small mb-3">
+                        {% for field in pwd_form %}
+                            {% for error in field.errors %}
+                                <div><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>
+                            {% endfor %}
+                        {% endfor %}
+                        {% for error in pwd_form.non_field_errors %}
+                            <div><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Current Password</label>
+                            <input type="password" class="form-control" name="old_password" required placeholder="Enter your current password">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">New Password</label>
+                            <input type="password" class="form-control" name="new_password1" required placeholder="Minimum 8 characters">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">Confirm New Password</label>
+                            <input type="password" class="form-control" name="new_password2" required placeholder="Re-type new password">
+                        </div>
+                    </div>
+                    <div class="mt-4 text-end">
+                        <button type="submit" class="btn btn-danger px-4" style="background-color: var(--kq-primary); border-color: var(--kq-primary);">
+                            <i class="bi bi-key me-1"></i>Update Password
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -81,9 +81,25 @@
                 </div>
             </div>
 
+            <!-- Demo Quick Role Switcher Pill -->
+            <div class="dropdown me-2 d-none d-sm-block">
+                <button class="btn btn-sm btn-outline-light dropdown-toggle py-1 px-2" type="button" id="roleSwitcherDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.78rem; border-color: rgba(255,255,255,0.35);">
+                    <i class="bi bi-arrow-repeat me-1 text-warning"></i>Role: <strong>{{ user.role.get_role_name_display|default:user.username }}</strong>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="roleSwitcherDropdown" style="font-size: 0.85rem;">
+                    <li><h6 class="dropdown-header small text-uppercase fw-bold text-muted">Presentation Mode — Switch Persona</h6></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 {% if user.username == 'admin' %}active{% endif %}" href="{% url 'core:switch_demo_role' 'admin' %}"><i class="bi bi-gear-fill text-danger"></i> System Administrator</a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 {% if user.username == 'operations' %}active{% endif %}" href="{% url 'core:switch_demo_role' 'operations' %}"><i class="bi bi-graph-up-arrow text-primary"></i> Operations Manager</a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 {% if user.username == 'sales' %}active{% endif %}" href="{% url 'core:switch_demo_role' 'sales' %}"><i class="bi bi-cart-check text-success"></i> Sales Agent</a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2 {% if user.username == 'warehouse' %}active{% endif %}" href="{% url 'core:switch_demo_role' 'warehouse' %}"><i class="bi bi-box-seam text-warning"></i> Warehouse Officer</a></li>
+                </ul>
+            </div>
+
             <div class="kq-user-info d-none d-sm-block">
-                <div class="kq-user-name">{{ user.get_full_name|default:user.username }}</div>
-                <div class="kq-user-role">{{ user.role }}</div>
+                <a href="{% url 'accounts:profile' %}" class="text-white text-decoration-none" title="View Profile & Settings">
+                    <div class="kq-user-name"><i class="bi bi-person-circle me-1"></i>{{ user.get_full_name|default:user.username }}</div>
+                    <div class="kq-user-role text-white-50">{{ user.role }}</div>
+                </a>
             </div>
             <form method="post" action="{% url 'accounts:logout' %}">
                 {% csrf_token %}

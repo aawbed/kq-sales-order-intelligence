@@ -54,6 +54,9 @@ class Order(models.Model):
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="orders_created"
     )
+    fulfillment_notes = models.TextField(
+        blank=True, default="", help_text="Dispatch vehicle, driver, or warehouse notes"
+    )
 
     class Meta:
         ordering = ["-order_date"]

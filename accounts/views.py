@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.forms import SystemUserCreationForm
@@ -161,3 +162,69 @@ def toggle_user_active(request, user_id):
         messages.success(request, f"'{target_user.username}' has been {status}.")
 
     return redirect("accounts:manage_users")
+
+
+@login_required
+def user_profile(request):
+    """
+    Staff Profile & Account Settings:
+    Allows authenticated personnel to update their display name, email,
+    and manage their account password securely.
+    """
+    user = request.user
+    from django.contrib.auth import update_session_auth_hash
+    from django.contrib.auth.forms import PasswordChangeForm
+
+    pwd_form = PasswordChangeForm(user=user)
+
+    if request.method == "POST":
+        if "update_profile" in request.POST:
+            first_name = request.POST.get("first_name", "").strip()
+            last_name = request.POST.get("last_name", "").strip()
+            email = request.POST.get("email", "").strip()
+
+            user.first_name = first_name
+            user.last_name = last_name
+            user.email = email
+            user.save(update_fields=["first_name", "last_name", "email"])
+
+            from core.audit import log_action
+
+            log_action(
+                request=request,
+                action="user_modified",
+                target_model="User",
+                target_id=user.username,
+                details=f"Staff member '{user.username}' updated their personal profile details.",
+            )
+            messages.success(request, "Your profile details have been updated successfully.")
+            return redirect("accounts:profile")
+
+        elif "change_password" in request.POST:
+            pwd_form = PasswordChangeForm(user=user, data=request.POST)
+            if pwd_form.is_valid():
+                pwd_user = pwd_form.save()
+                update_session_auth_hash(request, pwd_user)
+
+                from core.audit import log_action
+
+                log_action(
+                    request=request,
+                    action="user_modified",
+                    target_model="User",
+                    target_id=user.username,
+                    details=f"Staff member '{user.username}' changed their login password.",
+                )
+                messages.success(request, "Your security password was changed successfully.")
+                return redirect("accounts:profile")
+            else:
+                messages.error(request, "Please correct the password errors below.")
+
+    return render(
+        request,
+        "accounts/profile.html",
+        {
+            "profile_user": user,
+            "pwd_form": pwd_form,
+        },
+    )

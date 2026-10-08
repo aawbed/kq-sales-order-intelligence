@@ -32,6 +32,35 @@ def role_home_redirect(request):
     return redirect("accounts:login")
 
 
+@login_required
+def switch_demo_role(request, role_slug):
+    """
+    Demo/Presentation utility:
+    Instantly switch between the 4 authenticated role personas during a live presentation.
+    """
+    from django.contrib.auth import login
+    from accounts.models import User
+
+    role_map = {
+        "admin": "admin",
+        "operations": "operations",
+        "sales": "sales",
+        "warehouse": "warehouse",
+    }
+    target_username = role_map.get(role_slug)
+    if target_username:
+        try:
+            target_user = User.objects.get(username=target_username)
+            login(request, target_user)
+            messages.info(
+                request,
+                f"Switched role persona to {target_user.role.get_role_name_display()} (@{target_user.username})."
+            )
+        except User.DoesNotExist:
+            pass
+    return redirect("home")
+
+
 def custom_permission_denied(request, exception=None):
     """
     Friendly 403 page with a button to go back to the correct home page.

@@ -44,6 +44,8 @@ def confirm_order(request, order_id):
         messages.warning(request, f"Order KQ-{order.order_id} is not in 'Confirmed' status.")
         return redirect("inventory:confirm_fulfilment")
 
+    dispatch_notes = request.POST.get("dispatch_notes", "").strip()
+
     with transaction.atomic():
         for item in order.items.all():
             try:
@@ -52,16 +54,22 @@ def confirm_order(request, order_id):
             except Stock.DoesNotExist:
                 pass  # Product has no stock record — skip
 
-        order.update_status(Order.Status.FULFILLED)
+        order.status = Order.Status.FULFILLED
+        if dispatch_notes:
+            order.fulfillment_notes = dispatch_notes
+            order.save(update_fields=["status", "fulfillment_notes"])
+        else:
+            order.save(update_fields=["status"])
 
         from core.audit import log_action
 
+        note_detail = f" (Notes: '{dispatch_notes}')" if dispatch_notes else ""
         log_action(
             request=request,
             action="order_status_changed",
             target_model="Order",
             target_id=f"KQ-{order.order_id}",
-            details=f"Warehouse Officer confirmed fulfilment; status changed to Fulfilled. Stock deducted for {order.items.count()} item(s).",
+            details=f"Warehouse Officer confirmed fulfilment{note_detail}; status changed to Fulfilled. Stock deducted for {order.items.count()} item(s).",
         )
 
     messages.success(request, f"Order KQ-{order.order_id} fulfilled. Stock has been deducted.")

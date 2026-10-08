@@ -9,4 +9,5 @@ urlpatterns = [
     path("<int:notification_id>/read/", views.mark_notification_read, name="mark_notification_read"),
     path("mark-all-read/", views.mark_all_read, name="mark_all_read"),
     path("audit-logs/", views.audit_logs, name="audit_logs"),
+    path("switch-role/<str:role_slug>/", views.switch_demo_role, name="switch_demo_role"),
 ]
