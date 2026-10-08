@@ -25,6 +25,7 @@ urlpatterns = [
     path('orders/', include('orders.urls')),
     path('inventory/', include('inventory.urls')),
     path('analytics/', include('analytics.urls')),
+    path('notifications/', include('core.urls')),
     # Smart redirect — sends each user to their role-appropriate home page.
     path('', role_home_redirect, name='home'),
 ]

@@ -32,6 +32,14 @@ def create_order(request):
                     for obj in item_formset.deleted_objects:
                         obj.delete()
 
+                    # Evaluate order for ML anomaly patterns
+                    try:
+                        from core.alerts import check_and_alert_anomaly
+
+                        check_and_alert_anomaly(order)
+                    except Exception:
+                        pass
+
                     messages.success(
                         request,
                         f"Order KQ-{order.order_id} created successfully "

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block page_title %}Notifications{% endblock %}
+{% block sidebar %}
+  {% if user.role.role_name == 'sales_agent' %}
+    {% include 'partials/sidebar_sales_agent.html' %}
+  {% elif user.role.role_name == 'warehouse_officer' %}
+    {% include 'partials/sidebar_warehouse_officer.html' %}
+  {% elif user.role.role_name == 'operations_manager' %}
+    {% include 'partials/sidebar_operations_manager.html' %}
+  {% elif user.role.role_name == 'system_administrator' %}
+    {% include 'partials/sidebar_system_administrator.html' %}
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="kq-page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h4>
+            <i class="bi bi-bell-fill me-2" style="color: var(--kq-primary);"></i>Notification Centre
+            {% if unread_count %}
+                <span class="badge bg-danger ms-2 rounded-pill fs-6">{{ unread_count }} unread</span>
+            {% endif %}
+        </h4>
+        <p class="text-muted">Automated system alerts, stock threshold warnings, and machine learning anomalies</p>
+    </div>
+    {% if unread_count %}
+    <div>
+        <a href="{% url 'core:mark_all_read' %}" class="btn btn-sm btn-outline-dark">
+            <i class="bi bi-check2-all me-1"></i>Mark All as Read
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Filter Pills -->
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <span class="text-muted small fw-semibold me-1">Filter:</span>
+    <a href="?status=all{% if category_filter %}&category={{ category_filter }}{% endif %}" 
+       class="btn btn-sm {% if status_filter == 'all' %}btn-dark{% else %}btn-outline-secondary{% endif %} rounded-pill">
+       All
+    </a>
+    <a href="?status=unread{% if category_filter %}&category={{ category_filter }}{% endif %}" 
+       class="btn btn-sm {% if status_filter == 'unread' %}btn-dark{% else %}btn-outline-secondary{% endif %} rounded-pill">
+       Unread ({{ unread_count }})
+    </a>
+    <a href="?status=read{% if category_filter %}&category={{ category_filter }}{% endif %}" 
+       class="btn btn-sm {% if status_filter == 'read' %}btn-dark{% else %}btn-outline-secondary{% endif %} rounded-pill">
+       Read
+    </a>
+
+    <span class="text-muted small fw-semibold ms-3 me-1">Category:</span>
+    <a href="?category={% if status_filter %}&status={{ status_filter }}{% endif %}" 
+       class="btn btn-sm {% if not category_filter %}btn-secondary{% else %}btn-outline-secondary{% endif %} rounded-pill">
+       Any Category
+    </a>
+    <a href="?category=low_stock{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+       class="btn btn-sm {% if category_filter == 'low_stock' %}btn-warning text-dark{% else %}btn-outline-warning text-dark{% endif %} rounded-pill">
+       <i class="bi bi-box-seam me-1"></i>Low Stock
+    </a>
+    <a href="?category=anomaly{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+       class="btn btn-sm {% if category_filter == 'anomaly' %}btn-danger text-white{% else %}btn-outline-danger{% endif %} rounded-pill">
+       <i class="bi bi-cpu me-1"></i>ML Anomaly
+    </a>
+</div>
+
+<!-- Notification Feed -->
+<div class="card">
+    <div class="card-body p-0">
+        {% if page_obj %}
+        <div class="list-group list-group-flush">
+            {% for n in page_obj %}
+            <div class="list-group-item p-3 d-flex align-items-start gap-3 {% if not n.is_read %}bg-light border-start border-4 border-danger{% endif %}">
+                <!-- Icon indicator -->
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                     style="width: 40px; height: 40px; 
+                     {% if n.level == 'danger' %}background: var(--kq-danger-bg); color: var(--kq-danger);
+                     {% elif n.level == 'warning' %}background: var(--kq-warning-bg); color: var(--kq-warning);
+                     {% else %}background: var(--kq-info-bg); color: var(--kq-info);{% endif %}">
+                    {% if n.category == 'low_stock' %}
+                        <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                    {% elif n.category == 'anomaly' %}
+                        <i class="bi bi-cpu-fill fs-5"></i>
+                    {% elif n.category == 'order' %}
+                        <i class="bi bi-cart-check-fill fs-5"></i>
+                    {% else %}
+                        <i class="bi bi-info-circle-fill fs-5"></i>
+                    {% endif %}
+                </div>
+
+                <!-- Body -->
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <div class="d-flex align-items-center gap-2">
+                            <h6 class="mb-0 {% if not n.is_read %}fw-bold{% endif %}">{{ n.title }}</h6>
+                            <span class="badge {% if n.level == 'danger' %}bg-danger{% elif n.level == 'warning' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill small">
+                                {{ n.get_category_display }}
+                            </span>
+                            {% if not n.is_read %}
+                                <span class="badge bg-primary rounded-pill small">New</span>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">{{ n.created_at|timesince }} ago</small>
+                    </div>
+
+                    <p class="text-secondary small mb-2">{{ n.message|safe }}</p>
+
+                    <div class="d-flex align-items-center gap-2">
+                        {% if n.link %}
+                            <a href="{% url 'core:mark_notification_read' n.notification_id %}?next={{ n.link }}" 
+                               class="btn btn-sm btn-outline-dark py-0 px-2" style="font-size: 0.8rem;">
+                               <i class="bi bi-arrow-right-circle me-1"></i>View Details
+                            </a>
+                        {% endif %}
+                        {% if not n.is_read %}
+                            <a href="{% url 'core:mark_notification_read' n.notification_id %}" 
+                               class="btn btn-sm btn-light border py-0 px-2 text-muted" style="font-size: 0.8rem;">
+                               <i class="bi bi-check2 me-1"></i>Mark Read
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.paginator.num_pages > 1 %}
+        <div class="p-3 d-flex justify-content-between align-items-center" style="border-top: 1px solid var(--kq-border-light);">
+            <div class="text-muted small">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} alerts
+            </div>
+            <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}&status={{ status_filter }}&category={{ category_filter }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}&status={{ status_filter }}&category={{ category_filter }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <!-- Empty State -->
+        <div class="text-center py-5">
+            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                 style="width: 54px; height: 54px; background: #f3f4f6;">
+                <i class="bi bi-bell text-muted fs-3"></i>
+            </div>
+            <h6 class="fw-bold mb-1">No Alerts Found</h6>
+            <p class="text-muted small mb-0">You have no matching notifications at this time.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

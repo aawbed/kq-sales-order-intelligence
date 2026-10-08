@@ -30,6 +30,15 @@ class Stock(models.Model):
         """Corresponds to updateLevel() in the class diagram."""
         self.quantity_on_hand = max(0, self.quantity_on_hand + offset)
         self.save(update_fields=["quantity_on_hand"])
+
+        # Check if stock has reached or fallen below reorder threshold
+        try:
+            from core.alerts import trigger_low_stock_alert
+
+            trigger_low_stock_alert(self)
+        except Exception:
+            pass
+
         return self.quantity_on_hand
 
     @property
