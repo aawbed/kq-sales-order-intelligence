@@ -2,7 +2,7 @@ from django import forms
 from django.forms import inlineformset_factory
 
 from inventory.models import Product
-from orders.models import Customer, Order, OrderItem
+from orders.models import Customer, Order, OrderItem, Payment
 
 
 class CustomerForm(forms.ModelForm):
@@ -85,3 +85,61 @@ OrderItemFormSet = inlineformset_factory(
     extra=1,
     can_delete=True,
 )
+
+
+class PaymentForm(forms.ModelForm):
+    """Record a payment against an invoice with validation against invoice balance."""
+
+    class Meta:
+        model = Payment
+        fields = ["amount", "method", "reference", "payment_date", "notes"]
+        widgets = {
+            "amount": forms.NumberInput(attrs={
+                "class": "form-control",
+                "step": "0.01",
+                "min": "0.01",
+                "placeholder": "Amount in KSh",
+            }),
+            "method": forms.Select(attrs={"class": "form-select"}),
+            "reference": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "e.g. M-Pesa code, Cheque #, or Journal Ref",
+            }),
+            "payment_date": forms.DateInput(attrs={
+                "class": "form-control",
+                "type": "date",
+            }),
+            "notes": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Optional remarks",
+            }),
+        }
+
+    def __init__(self, *args, invoice=None, **kwargs):
+        self.invoice = invoice
+        super().__init__(*args, **kwargs)
+        if invoice and "amount" not in self.initial:
+            self.initial["amount"] = invoice.balance
+        from django.utils import timezone
+        if "payment_date" not in self.initial:
+            self.initial["payment_date"] = timezone.now().date()
+        self.fields["payment_date"].required = False
+
+    def clean_payment_date(self):
+        p_date = self.cleaned_data.get("payment_date")
+        if not p_date:
+            from django.utils import timezone
+            return timezone.now().date()
+        return p_date
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get("amount")
+        if not amount or amount <= 0:
+            raise forms.ValidationError("Payment amount must be greater than zero.")
+        if self.invoice is not None:
+            balance = self.invoice.balance
+            if amount > balance:
+                raise forms.ValidationError(
+                    f"Payment amount (KSh {amount:,.2f}) cannot exceed the outstanding balance (KSh {balance:,.2f})."
+                )
+        return amount

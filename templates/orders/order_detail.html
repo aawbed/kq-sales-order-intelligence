@@ -67,9 +67,18 @@
                         </button>
                     </form>
                     {% endif %}
+                    {% if order.invoice %}
+                    <a href="{% url 'orders:generate_invoice' order.order_id %}" class="btn btn-dark btn-sm">
+                        <i class="bi bi-receipt me-1"></i>View Invoice &amp; Payments (#INV-{{ order.invoice.invoice_id }})
+                    </a>
+                    <span class="badge {% if order.invoice.payment_status == 'paid' %}bg-success{% elif order.invoice.payment_status == 'partially_paid' %}bg-warning text-dark{% else %}bg-danger{% endif %} align-self-center py-2 px-3">
+                        Payment: {{ order.invoice.get_payment_status_display }}
+                    </span>
+                    {% else %}
                     <a href="{% url 'orders:generate_invoice' order.order_id %}" class="btn btn-outline-secondary btn-sm">
                         <i class="bi bi-receipt me-1"></i>Generate Invoice
                     </a>
+                    {% endif %}
                 </div>
             </div>
         </div>

@@ -1,5 +1,7 @@
+from decimal import Decimal
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class Customer(models.Model):
@@ -83,31 +85,93 @@ class OrderItem(models.Model):
 class Invoice(models.Model):
     """Corresponds to the INVOICE entity in the ERD / class diagram."""
 
+    class PaymentStatus(models.TextChoices):
+        UNPAID = "unpaid", "Unpaid"
+        PARTIALLY_PAID = "partially_paid", "Partially Paid"
+        PAID = "paid", "Paid"
+
     invoice_id = models.AutoField(primary_key=True)
     order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name="invoice")
     issue_date = models.DateField(auto_now_add=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
 
+    class Meta:
+        ordering = ["-issue_date", "-invoice_id"]
+
     def __str__(self):
         return f"Invoice #{self.invoice_id} for Order #{self.order_id}"
 
+    @property
+    def subtotal(self):
+        return sum(item.line_total for item in self.order.items.all())
+
+    @property
+    def vat_amount(self):
+        return round(Decimal(str(self.subtotal)) * Decimal("0.16"), 2)
+
     @classmethod
     def generate(cls, order):
-        """Corresponds to generate() in the class diagram."""
-        total = sum(item.line_total for item in order.items.all())
+        """Corresponds to generate() in the class diagram (with 16% VAT included)."""
+        subtotal = sum(item.line_total for item in order.items.all())
+        vat = round(Decimal(str(subtotal)) * Decimal("0.16"), 2)
+        total = Decimal(str(subtotal)) + vat
         invoice = cls.objects.create(order=order, total_amount=total)
         order.update_status(Order.Status.INVOICED)
         return invoice
+
+    @property
+    def amount_paid(self):
+        total = self.payments.aggregate(models.Sum("amount"))["amount__sum"]
+        return total or Decimal("0.00")
+
+    @property
+    def balance(self):
+        bal = Decimal(str(self.total_amount)) - self.amount_paid
+        return max(Decimal("0.00"), bal)
+
+    @property
+    def payment_status(self):
+        paid = self.amount_paid
+        total = Decimal(str(self.total_amount))
+        if paid <= 0:
+            return self.PaymentStatus.UNPAID
+        elif paid < total:
+            return self.PaymentStatus.PARTIALLY_PAID
+        else:
+            return self.PaymentStatus.PAID
 
 
 class Payment(models.Model):
     """Corresponds to the PAYMENT entity in the ERD / class diagram."""
 
+    class Method(models.TextChoices):
+        MPESA = "mpesa", "M-Pesa (Paybill)"
+        BANK_TRANSFER = "bank_transfer", "Bank Transfer"
+        CASH = "cash", "Cash"
+        CHEQUE = "cheque", "Cheque"
+        INTERNAL_JOURNAL = "internal_journal", "Internal Journal Transfer"
+
     payment_id = models.AutoField(primary_key=True)
     invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name="payments")
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    payment_date = models.DateField(auto_now_add=True)
-    method = models.CharField(max_length=30)
+    payment_date = models.DateField(default=timezone.now)
+    method = models.CharField(max_length=30, choices=Method.choices, default=Method.MPESA)
+    reference = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="e.g. M-Pesa transaction code, Cheque #, or Journal Ref",
+    )
+    notes = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments_recorded",
+    )
+
+    class Meta:
+        ordering = ["-payment_date", "-payment_id"]
 
     def __str__(self):
-        return f"Payment of {self.amount} for Invoice #{self.invoice_id}"
+        return f"Payment #{self.payment_id} of KSh {self.amount} ({self.get_method_display()}) for Invoice #{self.invoice_id}"

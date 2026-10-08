@@ -1,10 +1,12 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.db import models, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
-from core.permissions import sales_agent_required
-from orders.forms import CustomerForm, OrderForm, OrderItemFormSet
-from orders.models import Customer, Invoice, Order
+from core.permissions import sales_agent_required, sales_or_operations_required
+from orders.forms import CustomerForm, OrderForm, OrderItemFormSet, PaymentForm
+from orders.models import Customer, Invoice, Order, Payment
 
 
 @sales_agent_required
@@ -124,31 +126,35 @@ def customer_order_history(request, customer_id):
     )
 
 
-@sales_agent_required
+@sales_or_operations_required
 def generate_invoice(request, order_id):
-    """Figure 3.7e: Sales Agent — Generate Invoice."""
+    """Figure 3.7e: Generate Invoice & Payment Statement."""
     order = get_object_or_404(
         Order.objects.select_related("customer").prefetch_related("items__product"),
         pk=order_id,
     )
 
-    # Calculate totals
-    items = order.items.all()
-    subtotal = sum(item.line_total for item in items)
-    vat = subtotal * 16 / 100
-    total = subtotal + vat
+    existing_invoice = getattr(order, "invoice", None)
 
-    # If POST, actually generate the invoice record
-    if request.method == "POST":
-        if hasattr(order, "invoice"):
-            messages.info(request, "Invoice already exists for this order.")
-        else:
-            invoice = Invoice.generate(order)
-            messages.success(request, f"Invoice #{invoice.invoice_id} generated successfully.")
+    # If POST and no invoice exists, generate it
+    if request.method == "POST" and not existing_invoice:
+        invoice = Invoice.generate(order)
+        messages.success(request, f"Invoice #{invoice.invoice_id} generated successfully.")
         return redirect("orders:generate_invoice", order_id=order.order_id)
 
-    # Check if invoice already exists
-    existing_invoice = getattr(order, "invoice", None)
+    items = order.items.all()
+    if existing_invoice:
+        subtotal = existing_invoice.subtotal
+        vat = existing_invoice.vat_amount
+        total = existing_invoice.total_amount
+        payments = existing_invoice.payments.select_related("recorded_by").all()
+        payment_form = PaymentForm(invoice=existing_invoice)
+    else:
+        subtotal = sum(item.line_total for item in items)
+        vat = round(Decimal(str(subtotal)) * Decimal("0.16"), 2)
+        total = Decimal(str(subtotal)) + vat
+        payments = []
+        payment_form = None
 
     return render(
         request,
@@ -160,5 +166,50 @@ def generate_invoice(request, order_id):
             "vat": vat,
             "total": total,
             "existing_invoice": existing_invoice,
+            "payments": payments,
+            "payment_form": payment_form,
         },
     )
+
+
+@sales_or_operations_required
+def record_payment(request, order_id):
+    """Record a payment against an order's invoice."""
+    order = get_object_or_404(Order, pk=order_id)
+    if not hasattr(order, "invoice"):
+        messages.error(request, "Cannot record payment: no invoice has been generated for this order.")
+        return redirect("orders:order_detail", order_id=order.order_id)
+
+    invoice = order.invoice
+    if request.method == "POST":
+        form = PaymentForm(request.POST, invoice=invoice)
+        if form.is_valid():
+            payment = form.save(commit=False)
+            payment.invoice = invoice
+            payment.recorded_by = request.user
+            payment.save()
+            messages.success(
+                request,
+                f"Payment of KSh {payment.amount:,.2f} recorded via {payment.get_method_display()} "
+                f"(Ref: {payment.reference or 'N/A'}). Invoice balance: KSh {invoice.balance:,.2f}.",
+            )
+            return redirect("orders:generate_invoice", order_id=order.order_id)
+        else:
+            # Re-render invoice page with validation errors
+            items = order.items.all()
+            return render(
+                request,
+                "orders/generate_invoice.html",
+                {
+                    "order": order,
+                    "items": items,
+                    "subtotal": invoice.subtotal,
+                    "vat": invoice.vat_amount,
+                    "total": invoice.total_amount,
+                    "existing_invoice": invoice,
+                    "payments": invoice.payments.select_related("recorded_by").all(),
+                    "payment_form": form,
+                },
+            )
+
+    return redirect("orders:generate_invoice", order_id=order.order_id)

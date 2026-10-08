@@ -1,16 +1,20 @@
 import os
 import random
+from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
 from django.core.management.base import BaseCommand
-from orders.models import Customer, Order, OrderItem
+from orders.models import Customer, Order, OrderItem, Invoice, Payment
 from inventory.models import Product, Stock
 
+
 class Command(BaseCommand):
-    help = 'Seeds the database with demo data for ML models'
+    help = 'Seeds the database with demo data for operations, invoices, payments, and ML models'
 
     def handle(self, *args, **kwargs):
         # 1. Clear existing data
+        Payment.objects.all().delete()
+        Invoice.objects.all().delete()
         OrderItem.objects.all().delete()
         Order.objects.all().delete()
         Stock.objects.all().delete()
@@ -49,30 +53,96 @@ class Command(BaseCommand):
         now = timezone.now()
         statuses = [Order.Status.PENDING, Order.Status.CONFIRMED, Order.Status.FULFILLED, Order.Status.INVOICED]
         
+        invoices_created = 0
+        payments_created = 0
+
         for _ in range(250):
             customer = random.choice(customers)
             # Random date within last 365 days
             days_ago = random.randint(0, 365)
             order_date = now - timedelta(days=days_ago)
             
+            order_status = random.choice(statuses)
             order = Order.objects.create(
                 customer=customer,
-                status=random.choice(statuses)
+                status=order_status
             )
             # Update order_date (auto_now_add overrides on create)
             Order.objects.filter(pk=order.pk).update(order_date=order_date)
             
             # Add items
+            order_subtotal = Decimal("0.00")
             for _ in range(random.randint(1, 5)):
                 product = random.choice(products)
                 quantity = random.randint(1, 50)
                 if random.random() < 0.05:
-                    quantity = random.randint(200, 500) # Anomalous quantity
-                OrderItem.objects.create(
+                    quantity = random.randint(200, 500)  # Anomalous quantity
+                item = OrderItem.objects.create(
                     order=order,
                     product=product,
                     quantity=quantity,
                     unit_price=product.unit_price
                 )
+                order_subtotal += Decimal(str(item.line_total))
 
-        self.stdout.write(self.style.SUCCESS('Successfully seeded demo data.'))
+            # 5. Create Invoices and Payments for INVOICED orders
+            if order_status == Order.Status.INVOICED:
+                vat = round(order_subtotal * Decimal("0.16"), 2)
+                total_invoiced = order_subtotal + vat
+                invoice = Invoice.objects.create(
+                    order=order,
+                    total_amount=total_invoiced
+                )
+                # Ensure issue date matches historical order date
+                Invoice.objects.filter(pk=invoice.pk).update(issue_date=order_date.date())
+                invoices_created += 1
+
+                # Select payment method based on customer type
+                if customer.account_type == "KQ Internal Department":
+                    p_method = Payment.Method.INTERNAL_JOURNAL
+                    ref_prefix = "JRNL"
+                elif customer.account_type == "Corporate Client":
+                    p_method = random.choice([Payment.Method.BANK_TRANSFER, Payment.Method.MPESA, Payment.Method.CHEQUE])
+                    ref_prefix = "CORP"
+                elif customer.account_type == "Distributor":
+                    p_method = random.choice([Payment.Method.MPESA, Payment.Method.BANK_TRANSFER, Payment.Method.CASH])
+                    ref_prefix = "DST"
+                else:  # Government Entity
+                    p_method = random.choice([Payment.Method.BANK_TRANSFER, Payment.Method.CHEQUE])
+                    ref_prefix = "GOV"
+
+                # 60% Paid, 25% Partially Paid, 15% Unpaid
+                roll = random.random()
+                if roll < 0.60:
+                    # Fully Paid
+                    pay_date = (order_date + timedelta(days=random.randint(1, 15))).date()
+                    if pay_date > now.date():
+                        pay_date = now.date()
+                    Payment.objects.create(
+                        invoice=invoice,
+                        amount=total_invoiced,
+                        payment_date=pay_date,
+                        method=p_method,
+                        reference=f"{ref_prefix}-{random.randint(10000, 99999)}",
+                        notes="Settled in full"
+                    )
+                    payments_created += 1
+                elif roll < 0.85:
+                    # Partially Paid (e.g. 50% deposit)
+                    partial_amount = round(total_invoiced * Decimal(str(random.uniform(0.3, 0.7))), 2)
+                    pay_date = (order_date + timedelta(days=random.randint(1, 10))).date()
+                    if pay_date > now.date():
+                        pay_date = now.date()
+                    Payment.objects.create(
+                        invoice=invoice,
+                        amount=partial_amount,
+                        payment_date=pay_date,
+                        method=p_method,
+                        reference=f"{ref_prefix}-PART-{random.randint(1000, 9999)}",
+                        notes="Partial installment"
+                    )
+                    payments_created += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f'Successfully seeded demo data: 250 orders, {invoices_created} invoices, {payments_created} payments.'
+        ))

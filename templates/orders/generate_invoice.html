@@ -1,6 +1,12 @@
 {% extends "base.html" %}
-{% block page_title %}Invoice Statement{% endblock %}
-{% block sidebar %}{% include "partials/sidebar_sales_agent.html" %}{% endblock %}
+{% block page_title %}Invoice & Payment Statement{% endblock %}
+{% block sidebar %}
+    {% if user.role.role_name == 'operations_manager' %}
+        {% include "partials/sidebar_operations_manager.html" %}
+    {% else %}
+        {% include "partials/sidebar_sales_agent.html" %}
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 <a href="{% url 'orders:order_detail' order.order_id %}" class="text-decoration-none small d-inline-flex align-items-center gap-1 mb-3">
@@ -8,97 +14,335 @@
 </a>
 
 <div class="kq-page-header">
-    <div class="d-flex justify-content-between align-items-start">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div>
-            <h4><i class="bi bi-receipt me-2" style="color: var(--kq-primary);"></i>Invoice Billing Statement</h4>
-            <p class="text-muted">Review order charges and generate formal billing document</p>
+            <h4><i class="bi bi-receipt me-2" style="color: var(--kq-primary);"></i>Invoice & Payment Statement</h4>
+            <p class="text-muted mb-0">Formal billing statement and transaction payment records</p>
         </div>
-        {% if not existing_invoice %}
-        <form method="post">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-dark">
-                <i class="bi bi-filetype-pdf me-1"></i> Generate Invoice
-            </button>
-        </form>
-        {% else %}
-        <span class="badge badge-invoiced" style="font-size: 0.85rem; padding: 0.5em 1em;">
-            <i class="bi bi-check-circle me-1"></i>Invoice #{{ existing_invoice.invoice_id }} Generated
-        </span>
-        {% endif %}
+        <div class="d-flex align-items-center gap-2">
+            {% if not existing_invoice %}
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-dark">
+                    <i class="bi bi-receipt me-1"></i> Generate Invoice
+                </button>
+            </form>
+            {% else %}
+            <span class="badge badge-invoiced" style="font-size: 0.85rem; padding: 0.5em 0.9em;">
+                <i class="bi bi-receipt me-1"></i>Invoice #INV-{{ existing_invoice.invoice_id }}
+            </span>
+            {% if existing_invoice.payment_status == 'paid' %}
+            <span class="badge bg-success" style="font-size: 0.85rem; padding: 0.5em 0.9em;">
+                <i class="bi bi-check2-all me-1"></i>Paid in Full
+            </span>
+            {% elif existing_invoice.payment_status == 'partially_paid' %}
+            <span class="badge bg-warning text-dark" style="font-size: 0.85rem; padding: 0.5em 0.9em;">
+                <i class="bi bi-hourglass-split me-1"></i>Partially Paid
+            </span>
+            {% else %}
+            <span class="badge bg-danger" style="font-size: 0.85rem; padding: 0.5em 0.9em;">
+                <i class="bi bi-exclamation-circle me-1"></i>Unpaid
+            </span>
+            {% endif %}
+            {% endif %}
+        </div>
     </div>
 </div>
 
-<div class="card" style="max-width: 800px;">
-    <div class="card-body p-4">
-        <!-- Invoice header -->
-        <div class="d-flex justify-content-between align-items-start mb-4 pb-3" style="border-bottom: 2px solid var(--kq-dark);">
-            <div>
-                <div class="d-flex align-items-center gap-2 mb-1">
-                    <span style="background: var(--kq-primary); color: #fff; font-weight: 800; font-size: 0.7rem; padding: 0.25rem 0.5rem; border-radius: 4px;">KQ</span>
-                    <span class="fw-bold">Kenya Airways</span>
+<div class="row g-4">
+    <!-- Main Invoice Document -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body p-4">
+                <!-- Invoice header -->
+                <div class="d-flex justify-content-between align-items-start mb-4 pb-3" style="border-bottom: 2px solid var(--kq-dark);">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span style="background: var(--kq-primary); color: #fff; font-weight: 800; font-size: 0.75rem; padding: 0.25rem 0.55rem; border-radius: 4px;">KQ</span>
+                            <span class="fw-bold fs-6">Kenya Airways PLC</span>
+                        </div>
+                        <p class="text-muted small mb-0">Water Bottling &amp; Catering Sales Unit</p>
+                        <p class="text-muted small mb-0">Nairobi Hub, Kenya</p>
+                    </div>
+                    <div class="text-end">
+                        <div class="text-muted small fw-bold">TAX INVOICE</div>
+                        <h5 class="fw-bold mb-1" style="color: var(--kq-primary);">
+                            {% if existing_invoice %}#INV-{{ existing_invoice.invoice_id }}{% else %}Draft Invoice{% endif %}
+                        </h5>
+                        <div class="text-muted small">Date: {{ existing_invoice.issue_date|default:order.order_date|date:"F d, Y" }}</div>
+                    </div>
                 </div>
-                <p class="text-muted small mb-0">Sales & Order Intelligence</p>
-            </div>
-            <div class="text-end">
-                <div class="text-muted small">INVOICE</div>
-                <h5 class="fw-bold mb-0">#INV-{{ order.order_id }}</h5>
-            </div>
-        </div>
 
-        <!-- Billing details -->
-        <div class="row mb-4">
-            <div class="col-sm-6">
-                <div class="text-muted small fw-bold text-uppercase mb-1">Billed To</div>
-                <div class="fw-semibold">{{ order.customer.name }}</div>
-                <div class="text-muted small">{{ order.customer.contact_info }}</div>
-                <div class="text-muted small">{{ order.customer.account_type }}</div>
-            </div>
-            <div class="col-sm-6 text-sm-end mt-3 mt-sm-0">
-                <div class="text-muted small fw-bold text-uppercase mb-1">Booking Reference</div>
-                <div class="fw-semibold">KQ-{{ order.order_id }}</div>
-                <div class="text-muted small">{{ order.order_date|date:"F d, Y" }}</div>
-                <div>
-                    <span class="badge badge-{{ order.status }}">{{ order.get_status_display }}</span>
+                <!-- Billing details -->
+                <div class="row mb-4">
+                    <div class="col-sm-6">
+                        <div class="text-muted small fw-bold text-uppercase mb-1">Billed To</div>
+                        <div class="fw-bold fs-6">{{ order.customer.name }}</div>
+                        <div class="text-muted small"><i class="bi bi-envelope me-1"></i>{{ order.customer.contact_info }}</div>
+                        <div class="mt-1">
+                            <span class="badge bg-light text-dark border">{{ order.customer.account_type }}</span>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 text-sm-end mt-3 mt-sm-0">
+                        <div class="text-muted small fw-bold text-uppercase mb-1">Order Details</div>
+                        <div class="fw-semibold">Booking Ref: KQ-{{ order.order_id }}</div>
+                        <div class="text-muted small">Placed: {{ order.order_date|date:"M d, Y H:i" }}</div>
+                        <div class="mt-1">
+                            <span class="badge badge-{{ order.status }}">{{ order.get_status_display }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Items table -->
+                <div class="table-responsive mb-3">
+                    <table class="table align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Item Description</th>
+                                <th class="text-center">Quantity</th>
+                                <th class="text-end">Unit Price</th>
+                                <th class="text-end">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td class="text-muted small">{{ forloop.counter }}</td>
+                                <td class="fw-semibold">{{ item.product.name }}</td>
+                                <td class="text-center">{{ item.quantity }}</td>
+                                <td class="text-end">KSh {{ item.unit_price|floatformat:2 }}</td>
+                                <td class="text-end fw-semibold">KSh {{ item.line_total|floatformat:2 }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-muted text-center py-3">No line items in this order</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Totals & Balances -->
+                <div class="row pt-3" style="border-top: 2px solid var(--kq-border);">
+                    <div class="col-sm-6">
+                        <div class="small text-muted">
+                            <div><strong>Tax Classification:</strong> Standard 16% VAT</div>
+                            <div><strong>Currency:</strong> Kenyan Shillings (KES)</div>
+                            {% if existing_invoice %}
+                            <div class="mt-2 text-muted">
+                                <em>Settlements accepted via M-Pesa Paybill, Bank Transfer, Cheque, or Internal Journal Transfer.</em>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-sm-6 text-sm-end">
+                        <div class="text-muted small mb-1">Subtotal (Excl. Tax): <span class="fw-semibold text-dark">KSh {{ subtotal|floatformat:2 }}</span></div>
+                        <div class="text-muted small mb-2">VAT (16%): <span class="fw-semibold text-dark">KSh {{ vat|floatformat:2 }}</span></div>
+                        <div class="fs-5 pb-2 mb-2" style="border-bottom: 1px dashed var(--kq-border);">
+                            Total Invoiced: <span class="fw-bold" style="color: var(--kq-primary);">KSh {{ total|floatformat:2 }}</span>
+                        </div>
+                        {% if existing_invoice %}
+                        <div class="text-muted small mb-1">
+                            Amount Paid: <span class="fw-bold text-success">KSh {{ existing_invoice.amount_paid|floatformat:2 }}</span>
+                        </div>
+                        <div class="fs-6 mt-1">
+                            Balance Due:
+                            <span class="fw-bold {% if existing_invoice.balance > 0 %}text-danger{% else %}text-success{% endif %}">
+                                KSh {{ existing_invoice.balance|floatformat:2 }}
+                            </span>
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Items table -->
-        <div class="table-responsive mb-3">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Description</th>
-                        <th class="text-center">Qty</th>
-                        <th class="text-end">Unit Price</th>
-                        <th class="text-end">Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in items %}
-                    <tr>
-                        <td>{{ item.product.name }}</td>
-                        <td class="text-center">{{ item.quantity }}</td>
-                        <td class="text-end">KSh {{ item.unit_price }}</td>
-                        <td class="text-end fw-semibold">KSh {{ item.line_total }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="4" class="text-muted text-center py-3">No items</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Totals -->
-        <div class="text-end pt-3" style="border-top: 2px solid var(--kq-border);">
-            <div class="text-muted small">Subtotal: <span class="fw-semibold text-dark">KSh {{ subtotal }}</span></div>
-            <div class="text-muted small">VAT (16%): <span class="fw-semibold text-dark">KSh {{ vat }}</span></div>
-            <div class="fs-5 mt-1">
-                Total: <span class="fw-bold" style="color: var(--kq-primary);">KSh {{ total }}</span>
+        <!-- Payment History Table -->
+        {% if existing_invoice %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0">
+                    <i class="bi bi-clock-history me-2 text-primary"></i>Payment History &amp; Receipts
+                </h6>
+                <span class="badge bg-secondary">{{ payments|length }} record(s)</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Receipt #</th>
+                                <th>Date</th>
+                                <th>Method</th>
+                                <th>Reference</th>
+                                <th>Recorded By</th>
+                                <th class="text-end">Amount Paid</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in payments %}
+                            <tr>
+                                <td class="fw-semibold">RCP-{{ payment.payment_id }}</td>
+                                <td>{{ payment.payment_date|date:"M d, Y" }}</td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">
+                                        {{ payment.get_method_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <code>{{ payment.reference|default:"—" }}</code>
+                                    {% if payment.notes %}
+                                    <div class="small text-muted">{{ payment.notes }}</div>
+                                    {% endif %}
+                                </td>
+                                <td class="small text-muted">
+                                    {{ payment.recorded_by.username|default:"System" }}
+                                </td>
+                                <td class="text-end fw-bold text-success">
+                                    KSh {{ payment.amount|floatformat:2 }}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="bi bi-wallet2 fs-3 d-block mb-1 text-muted"></i>
+                                    No payments recorded yet for this invoice.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        {% if payments %}
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="5" class="text-end">Total Amount Paid:</th>
+                                <th class="text-end text-success fw-bold">KSh {{ existing_invoice.amount_paid|floatformat:2 }}</th>
+                            </tr>
+                        </tfoot>
+                        {% endif %}
+                    </table>
+                </div>
             </div>
         </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar / Record Payment Form -->
+    <div class="col-lg-4">
+        {% if existing_invoice %}
+            {% if existing_invoice.balance > 0 %}
+            <div class="card shadow-sm border-primary mb-3">
+                <div class="card-header bg-primary text-white py-3">
+                    <h6 class="fw-bold mb-0">
+                        <i class="bi bi-cash-coin me-2"></i>Record New Payment
+                    </h6>
+                </div>
+                <div class="card-body p-3">
+                    <p class="text-muted small mb-3">
+                        Capture customer payment receipt against invoice <strong>#INV-{{ existing_invoice.invoice_id }}</strong>.
+                    </p>
+
+                    <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 px-3 mb-3">
+                        <span class="text-muted small">Outstanding Balance:</span>
+                        <span class="fw-bold text-danger fs-6">KSh {{ existing_invoice.balance|floatformat:2 }}</span>
+                    </div>
+
+                    {% if payment_form.errors %}
+                    <div class="alert alert-danger py-2 px-3 mb-3 small">
+                        <strong>Please correct the following:</strong>
+                        <ul class="mb-0 ps-3">
+                            {% for field, errors in payment_form.errors.items %}
+                                {% for error in errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    <form method="post" action="{% url 'orders:record_payment' order.order_id %}">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Payment Amount (KSh) <span class="text-danger">*</span></label>
+                            {{ payment_form.amount }}
+                            <div class="form-text small">Max payable: KSh {{ existing_invoice.balance|floatformat:2 }}</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Payment Method <span class="text-danger">*</span></label>
+                            {{ payment_form.method }}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Transaction Reference</label>
+                            {{ payment_form.reference }}
+                            <div class="form-text small">e.g. M-Pesa Code (QKH8192..), Cheque #, or Journal Ref</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Payment Date</label>
+                            {{ payment_form.payment_date }}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Remarks / Notes</label>
+                            {{ payment_form.notes }}
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 py-2">
+                            <i class="bi bi-check-circle me-1"></i> Confirm &amp; Record Payment
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="card shadow-sm border-success mb-3">
+                <div class="card-body text-center p-4">
+                    <div class="rounded-circle bg-success text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 50px; height: 50px;">
+                        <i class="bi bi-check-lg fs-3"></i>
+                    </div>
+                    <h6 class="fw-bold text-success mb-1">Invoice Fully Settled</h6>
+                    <p class="text-muted small mb-0">
+                        All charges for this order have been paid in full (KSh {{ existing_invoice.amount_paid|floatformat:2 }}). No outstanding balance remaining.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Customer Summary Card -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-person me-2 text-primary"></i>Customer Profile</h6>
+                </div>
+                <div class="card-body">
+                    <div class="fw-bold mb-1">{{ order.customer.name }}</div>
+                    <div class="text-muted small mb-2">{{ order.customer.contact_info }}</div>
+                    <div class="mb-3">
+                        <span class="badge bg-secondary">{{ order.customer.account_type }}</span>
+                    </div>
+                    <a href="{% url 'orders:customer_order_history' order.customer.customer_id %}" class="btn btn-outline-dark btn-sm w-100">
+                        <i class="bi bi-clock-history me-1"></i> Customer Order History
+                    </a>
+                </div>
+            </div>
+        {% else %}
+            <!-- Uninvoiced State -->
+            <div class="card shadow-sm border-warning">
+                <div class="card-body p-4 text-center">
+                    <i class="bi bi-receipt-cutoff fs-1 text-warning mb-2 d-block"></i>
+                    <h6 class="fw-bold mb-1">Draft Invoice</h6>
+                    <p class="text-muted small mb-3">
+                        This order does not have an active invoice record yet. Click below to generate the formal invoice and enable payment capture.
+                    </p>
+                    <form method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-dark w-100">
+                            <i class="bi bi-receipt me-1"></i> Generate Invoice
+                        </button>
+                    </form>
+                </div>
+            </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

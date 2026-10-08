@@ -42,3 +42,7 @@ sales_agent_required = role_required(Role.RoleName.SALES_AGENT)
 warehouse_officer_required = role_required(Role.RoleName.WAREHOUSE_OFFICER)
 operations_manager_required = role_required(Role.RoleName.OPERATIONS_MANAGER)
 system_administrator_required = role_required(Role.RoleName.SYSTEM_ADMINISTRATOR)
+sales_or_operations_required = role_required(
+    Role.RoleName.SALES_AGENT,
+    Role.RoleName.OPERATIONS_MANAGER,
+)
