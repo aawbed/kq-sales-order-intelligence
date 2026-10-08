@@ -91,10 +91,19 @@ def dashboard(request):
         except Exception:
             anomaly_run = None
 
-    anomalies = (
-        list(anomaly_run.anomaly_records.select_related("order__customer", "reviewed_by").all()[:10])
-        if anomaly_run else []
-    )
+    anomalies = []
+    reviewed_anomalies = []
+    if anomaly_run:
+        anomalies = list(
+            anomaly_run.anomaly_records.filter(
+                review_status=OrderAnomalyRecord.ReviewStatus.PENDING
+            ).select_related("order__customer", "reviewed_by").all()[:10]
+        )
+        reviewed_anomalies = list(
+            anomaly_run.anomaly_records.exclude(
+                review_status=OrderAnomalyRecord.ReviewStatus.PENDING
+            ).select_related("order__customer", "reviewed_by").all()[:10]
+        )
 
     # 3. K-Means Customer Segments
     segment_run = MLModelRun.objects.filter(
@@ -125,6 +134,7 @@ def dashboard(request):
         "anomaly_run": anomaly_run,
         "segment_run": segment_run,
         "anomalies": anomalies,
+        "reviewed_anomalies": reviewed_anomalies,
         "segments": segments,
     }
     return render(request, "analytics/dashboard.html", context)
