@@ -6,13 +6,34 @@ from django.utils import timezone
 from django.core.management.base import BaseCommand
 from orders.models import Customer, Order, OrderItem, Invoice, Payment
 from inventory.models import Product, Stock
+from accounts.models import Role, User
 
 
 class Command(BaseCommand):
     help = 'Seeds the database with demo data for operations, invoices, payments, and ML models'
 
     def handle(self, *args, **kwargs):
-        # 1. Clear existing data
+        # 0. Ensure Roles and Demo Accounts
+        roles = {}
+        for role_name, _ in Role.RoleName.choices:
+            r, _ = Role.objects.get_or_create(role_name=role_name)
+            roles[role_name] = r
+
+        demo_users = [
+            ("admin", "admin@kq.co.ke", "system_administrator", True, True),
+            ("operations", "operations@kq.co.ke", "operations_manager", False, False),
+            ("sales", "sales@kq.co.ke", "sales_agent", False, False),
+            ("warehouse", "warehouse@kq.co.ke", "warehouse_officer", False, False),
+        ]
+        for uname, email, r_name, is_staff, is_super in demo_users:
+            u, _ = User.objects.get_or_create(username=uname, defaults={"email": email})
+            u.set_password("Password123!")
+            u.role = roles[r_name]
+            u.is_staff = is_staff
+            u.is_superuser = is_super
+            u.save()
+
+        # 1. Clear existing transactional data
         Payment.objects.all().delete()
         Invoice.objects.all().delete()
         OrderItem.objects.all().delete()

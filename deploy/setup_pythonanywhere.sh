@@ -55,9 +55,12 @@ if [ ! -f ".env" ]; then
     sed -i "s/change-this-to-a-random-secret-key/$SECRET_KEY/" .env
     sed -i "s/DJANGO_DEBUG=True/DJANGO_DEBUG=False/" .env
     sed -i "s/DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1/DJANGO_ALLOWED_HOSTS=.pythonanywhere.com,localhost,127.0.0.1/" .env
-    echo "      Generated .env with secure random secret key."
+    sed -i "s/DB_ENGINE=mysql/DB_ENGINE=sqlite/" .env
+    echo "      Generated .env with secure random secret key and SQLite database."
 else
-    echo "[4/7] .env configuration already present."
+    # Ensure existing .env is set to SQLite so it does not attempt to connect to localhost MySQL
+    sed -i "s/DB_ENGINE=mysql/DB_ENGINE=sqlite/" .env
+    echo "[4/7] Verified .env configuration (using SQLite database)."
 fi
 
 # 5. Database migrations
