@@ -5,9 +5,11 @@ from django.db import models
 from django.shortcuts import render
 from django.utils import timezone
 
+from decimal import Decimal
+
 from core.permissions import operations_manager_required, system_administrator_required
 from inventory.models import Stock
-from orders.models import Customer, Order, OrderItem
+from orders.models import Customer, Invoice, Order, OrderItem, Payment
 
 
 @operations_manager_required
@@ -90,3 +92,112 @@ def generate_reports(request):
 def system_settings(request):
     """Figure 3.7k: System Administrator — System Settings."""
     return render(request, "analytics/system_settings.html")
+
+
+@operations_manager_required
+def accounts_receivable(request):
+    """
+    Accounts Receivable Dashboard:
+    Tracks invoiced vs collected revenue, outstanding balances,
+    and ageing buckets (0-30, 31-60, 61-90, 90+ days) per the Invoicing
+    and Reporting Module specification.
+    """
+    today = timezone.now().date()
+
+    invoices = Invoice.objects.select_related("order__customer").prefetch_related("payments").all()
+
+    # Query filters
+    q = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "").strip()
+    ageing_filter = request.GET.get("ageing", "").strip()
+    account_type_filter = request.GET.get("account_type", "").strip()
+
+    total_invoiced = Decimal("0.00")
+    total_collected = Decimal("0.00")
+
+    # Buckets: amounts and counts
+    buckets = {
+        "current": {"label": "0–30 Days (Current)", "amount": Decimal("0.00"), "count": 0, "badge": "success"},
+        "month1": {"label": "31–60 Days", "amount": Decimal("0.00"), "count": 0, "badge": "info"},
+        "month2": {"label": "61–90 Days", "amount": Decimal("0.00"), "count": 0, "badge": "warning"},
+        "overdue": {"label": "90+ Days (Overdue)", "amount": Decimal("0.00"), "count": 0, "badge": "danger"},
+    }
+
+    invoice_list = []
+
+    for inv in invoices:
+        tot = Decimal(str(inv.total_amount))
+        paid = inv.amount_paid
+        bal = inv.balance
+        age_days = (today - inv.issue_date).days
+
+        total_invoiced += tot
+        total_collected += paid
+
+        # Determine ageing bucket
+        if age_days <= 30:
+            b_key = "current"
+        elif age_days <= 60:
+            b_key = "month1"
+        elif age_days <= 90:
+            b_key = "month2"
+        else:
+            b_key = "overdue"
+
+        if bal > 0:
+            buckets[b_key]["amount"] += bal
+            buckets[b_key]["count"] += 1
+
+        # Check filters for table display
+        inv_data = {
+            "invoice": inv,
+            "order": inv.order,
+            "customer": inv.order.customer,
+            "total_amount": tot,
+            "amount_paid": paid,
+            "balance": bal,
+            "age_days": max(0, age_days),
+            "ageing_bucket": b_key,
+            "status": inv.payment_status,
+        }
+
+        # Apply filters
+        match = True
+        if q:
+            q_lower = q.lower()
+            match = (
+                q_lower in inv.order.customer.name.lower()
+                or q in str(inv.invoice_id)
+                or q in str(inv.order.order_id)
+            )
+        if match and status_filter:
+            match = (inv.payment_status == status_filter)
+        if match and ageing_filter:
+            match = (b_key == ageing_filter)
+        if match and account_type_filter:
+            match = (inv.order.customer.account_type == account_type_filter)
+
+        if match:
+            invoice_list.append(inv_data)
+
+    total_outstanding = max(Decimal("0.00"), total_invoiced - total_collected)
+    collection_rate = round((total_collected / total_invoiced * 100), 1) if total_invoiced > 0 else 0.0
+
+    # Calculate percentages for buckets
+    for b in buckets.values():
+        b["percent"] = round((b["amount"] / total_outstanding * 100), 1) if total_outstanding > 0 else 0.0
+
+    context = {
+        "total_invoiced": total_invoiced,
+        "total_collected": total_collected,
+        "total_outstanding": total_outstanding,
+        "collection_rate": collection_rate,
+        "buckets": buckets,
+        "invoices": invoice_list,
+        "q": q,
+        "status_filter": status_filter,
+        "ageing_filter": ageing_filter,
+        "account_type_filter": account_type_filter,
+        "account_types": ["KQ Internal Department", "Corporate Client", "Government Entity", "Distributor"],
+    }
+    return render(request, "analytics/accounts_receivable.html", context)

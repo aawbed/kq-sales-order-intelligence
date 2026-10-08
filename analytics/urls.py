@@ -9,6 +9,8 @@ urlpatterns = [
     path("dashboard/", views.dashboard, name="dashboard"),
     # Figure 3.7i: Generate Reports
     path("reports/", views.generate_reports, name="generate_reports"),
+    # Accounts Receivable Dashboard
+    path("receivables/", views.accounts_receivable, name="accounts_receivable"),
     # Figure 3.7k: System Settings
     path("settings/", views.system_settings, name="system_settings"),
 ]
