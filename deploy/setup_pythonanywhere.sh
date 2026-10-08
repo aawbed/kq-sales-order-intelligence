@@ -13,12 +13,13 @@ echo "  KQ Sales & Order Intelligence — Deploying to PythonAnywhere"
 echo "=================================================================="
 
 # 1. Determine best available Python 3 version
-if command -v python3.12 &>/dev/null; then
-    PY_BIN="python3.12"
+# Prioritize Python 3.10 on PythonAnywhere as it contains pre-installed scientific libraries (numpy, scipy, pandas, scikit-learn)
+if command -v python3.10 &>/dev/null; then
+    PY_BIN="python3.10"
 elif command -v python3.11 &>/dev/null; then
     PY_BIN="python3.11"
-elif command -v python3.10 &>/dev/null; then
-    PY_BIN="python3.10"
+elif command -v python3.12 &>/dev/null; then
+    PY_BIN="python3.12"
 else
     PY_BIN="python3"
 fi
@@ -27,18 +28,23 @@ echo "[1/7] Using Python binary: $PY_BIN"
 
 # 2. Set up virtual environment
 VENV_DIR="$HOME/.virtualenvs/kq-venv"
-if [ ! -d "$VENV_DIR" ]; then
-    echo "[2/7] Creating virtual environment at $VENV_DIR..."
-    $PY_BIN -m venv "$VENV_DIR"
+if [ -d "$VENV_DIR" ]; then
+    if ! grep -q "include-system-site-packages = true" "$VENV_DIR/pyvenv.cfg" 2>/dev/null; then
+        echo "[2/7] Re-creating virtual environment with system packages to fit disk quota..."
+        rm -rf "$VENV_DIR"
+        $PY_BIN -m venv --system-site-packages "$VENV_DIR"
+    else
+        echo "[2/7] Virtual environment already exists with system packages at $VENV_DIR."
+    fi
 else
-    echo "[2/7] Virtual environment already exists at $VENV_DIR."
+    echo "[2/7] Creating virtual environment with system packages at $VENV_DIR..."
+    $PY_BIN -m venv --system-site-packages "$VENV_DIR"
 fi
 
 source "$VENV_DIR/bin/activate"
 
-# 3. Upgrade pip and install dependencies
-echo "[3/7] Installing project dependencies (without caching to save disk)..."
-pip install --no-cache-dir --upgrade pip
+# 3. Install project dependencies
+echo "[3/7] Installing project dependencies (reusing system packages to save disk)..."
 pip install --no-cache-dir -r requirements.txt
 
 # 4. Configure .env if not present

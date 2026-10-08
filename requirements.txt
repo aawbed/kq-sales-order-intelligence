@@ -10,10 +10,10 @@ pymysql>=1.1.0
 whitenoise>=6.6.0
 
 # Machine Learning pipeline (analytics/ml/)
-scikit-learn>=1.4.0,<1.6.0
-pandas>=2.0.0
-numpy>=1.24.0,<2.0.0
-statsmodels>=0.14.0
+scikit-learn
+pandas
+numpy
+statsmodels
 
 # PDF invoice generation (ReportLab)
-reportlab>=4.0.0
+reportlab
