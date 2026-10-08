@@ -12,12 +12,22 @@
     {% csrf_token %}
     <div class="card mb-3" style="max-width: 900px;">
         <div class="card-body">
-            <div class="mb-3">
-                <label class="form-label fw-semibold">Customer / Account</label>
-                {{ order_form.customer }}
-                {% if order_form.customer.errors %}
-                <div class="text-danger small mt-1">{{ order_form.customer.errors.0 }}</div>
-                {% endif %}
+            <div class="row mb-3">
+                <div class="col-md-8 mb-3 mb-md-0">
+                    <label class="form-label fw-semibold">Customer / Account</label>
+                    {{ order_form.customer }}
+                    {% if order_form.customer.errors %}
+                    <div class="text-danger small mt-1">{{ order_form.customer.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Fulfilment Priority</label>
+                    {{ order_form.priority }}
+                    {% if order_form.priority.errors %}
+                    <div class="text-danger small mt-1">{{ order_form.priority.errors.0 }}</div>
+                    {% endif %}
+                    <div class="form-text small">Urgent flags appear first in warehouse queue</div>
+                </div>
             </div>
 
             <!-- Formset management data -->

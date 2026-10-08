@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db import transaction
+from django.db import models, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
 from core.permissions import warehouse_officer_required
@@ -10,10 +10,25 @@ from orders.models import Order
 
 @warehouse_officer_required
 def confirm_fulfilment(request):
-    """Figure 3.7f: Warehouse Officer — Confirm Fulfilment."""
-    pending_orders = Order.objects.filter(
-        status=Order.Status.CONFIRMED
-    ).select_related("customer").prefetch_related("items__product")
+    """
+    Figure 3.7f: Warehouse Officer — Confirm Fulfilment.
+    Orders are prioritised with Urgent bookings first, followed by High and Normal,
+    then chronologically by booking date.
+    """
+    priority_order = models.Case(
+        models.When(priority=Order.Priority.URGENT, then=models.Value(1)),
+        models.When(priority=Order.Priority.HIGH, then=models.Value(2)),
+        models.When(priority=Order.Priority.NORMAL, then=models.Value(3)),
+        default=models.Value(4),
+        output_field=models.IntegerField(),
+    )
+    pending_orders = (
+        Order.objects.filter(status=Order.Status.CONFIRMED)
+        .annotate(priority_rank=priority_order)
+        .order_by("priority_rank", "-order_date")
+        .select_related("customer")
+        .prefetch_related("items__product")
+    )
     return render(request, "inventory/confirm_fulfilment.html", {"orders": pending_orders})
 
 

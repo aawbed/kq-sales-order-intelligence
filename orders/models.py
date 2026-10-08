@@ -41,10 +41,16 @@ class Order(models.Model):
         FULFILLED = "fulfilled", "Fulfilled"
         INVOICED = "invoiced", "Invoiced"
 
+    class Priority(models.TextChoices):
+        NORMAL = "normal", "Normal"
+        HIGH = "high", "High"
+        URGENT = "urgent", "Urgent"
+
     order_id = models.AutoField(primary_key=True)
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="orders")
     order_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    priority = models.CharField(max_length=20, choices=Priority.choices, default=Priority.NORMAL)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="orders_created"
     )

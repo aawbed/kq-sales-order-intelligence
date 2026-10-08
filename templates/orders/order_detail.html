@@ -14,9 +14,24 @@
             Placed on {{ order.order_date|date:"F d, Y \a\t H:i" }}
         </p>
     </div>
-    <span class="badge badge-{{ order.status }}" style="font-size: 0.82rem; padding: 0.45em 0.9em;">
-        {{ order.get_status_display }}
-    </span>
+    <div class="d-flex align-items-center gap-2">
+        {% if order.priority == 'urgent' %}
+            <span class="badge bg-danger" style="font-size: 0.82rem; padding: 0.45em 0.9em;">
+                <i class="bi bi-lightning-fill me-1"></i>Urgent Priority
+            </span>
+        {% elif order.priority == 'high' %}
+            <span class="badge bg-warning text-dark" style="font-size: 0.82rem; padding: 0.45em 0.9em;">
+                <i class="bi bi-arrow-up-circle me-1"></i>High Priority
+            </span>
+        {% else %}
+            <span class="badge bg-light text-secondary border" style="font-size: 0.82rem; padding: 0.45em 0.9em;">
+                Normal Priority
+            </span>
+        {% endif %}
+        <span class="badge badge-{{ order.status }}" style="font-size: 0.82rem; padding: 0.45em 0.9em;">
+            {{ order.get_status_display }}
+        </span>
+    </div>
 </div>
 
 <div class="row g-3">

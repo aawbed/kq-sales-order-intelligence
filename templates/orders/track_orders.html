@@ -35,6 +35,7 @@
                         <th>Order ID</th>
                         <th>Customer / Agency</th>
                         <th>Booking Date</th>
+                        <th>Priority</th>
                         <th>Fulfillment Status</th>
                         <th>Actions</th>
                     </tr>
@@ -45,6 +46,15 @@
                         <td class="fw-semibold">KQ-{{ order.order_id }}</td>
                         <td>{{ order.customer.name }}</td>
                         <td>{{ order.order_date|date:"M d, Y" }}</td>
+                        <td>
+                            {% if order.priority == 'urgent' %}
+                                <span class="badge bg-danger"><i class="bi bi-lightning-fill me-1"></i>Urgent</span>
+                            {% elif order.priority == 'high' %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-arrow-up-circle me-1"></i>High</span>
+                            {% else %}
+                                <span class="badge bg-light text-secondary border">Normal</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <span class="badge badge-{{ order.status }}">
                                 {{ order.get_status_display }}

@@ -32,19 +32,21 @@ class CustomerForm(forms.ModelForm):
 
 
 class OrderForm(forms.ModelForm):
-    """Select a customer for a new order."""
+    """Select a customer and fulfilment priority for a new order."""
 
     class Meta:
         model = Order
-        fields = ["customer"]
+        fields = ["customer", "priority"]
         widgets = {
             "customer": forms.Select(attrs={"class": "form-select"}),
+            "priority": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["customer"].queryset = Customer.objects.all()
         self.fields["customer"].empty_label = "Select a customer..."
+        self.fields["priority"].initial = Order.Priority.NORMAL
 
 
 class OrderItemForm(forms.ModelForm):

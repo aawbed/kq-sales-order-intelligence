@@ -15,6 +15,7 @@
                 <thead>
                     <tr>
                         <th>Order Ref ID</th>
+                        <th>Priority</th>
                         <th>Customer Account</th>
                         <th>Payload Items</th>
                         <th>Logistics Date</th>
@@ -23,8 +24,17 @@
                 </thead>
                 <tbody>
                     {% for order in orders %}
-                    <tr>
+                    <tr {% if order.priority == 'urgent' %}class="table-warning border-start border-4 border-danger"{% endif %}>
                         <td class="fw-semibold">KQ-{{ order.order_id }}</td>
+                        <td>
+                            {% if order.priority == 'urgent' %}
+                                <span class="badge bg-danger"><i class="bi bi-lightning-fill me-1"></i>Urgent</span>
+                            {% elif order.priority == 'high' %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-arrow-up-circle me-1"></i>High</span>
+                            {% else %}
+                                <span class="badge bg-light text-secondary border">Normal</span>
+                            {% endif %}
+                        </td>
                         <td>{{ order.customer.name }}</td>
                         <td>
                             {% for item in order.items.all %}
@@ -45,7 +55,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5">
+                        <td colspan="6">
                             <div class="kq-empty-state">
                                 <i class="bi bi-check-circle" style="font-size: 2.5rem; opacity: 0.3;"></i>
                                 <p class="mt-2 mb-1 fw-semibold">No pending orders</p>
