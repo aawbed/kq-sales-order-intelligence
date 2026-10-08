@@ -1,5 +1,7 @@
 # KQ Sales & Order Intelligence System
 
+[![Django CI](https://github.com/aawbed/kq-sales-order-intelligence/actions/workflows/django.yml/badge.svg)](https://github.com/aawbed/kq-sales-order-intelligence/actions/workflows/django.yml)
+
 A Machine Learning-Driven Sales and Order Intelligence System developed for
 Kenya Airways's internal water sales and order management operations, as a
 final-year project (BSc Informatics and Computer Science, Strathmore
