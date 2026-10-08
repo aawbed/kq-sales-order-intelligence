@@ -1,45 +1,148 @@
 {% extends "base.html" %}
-{% block page_title %}System Reporting{% endblock %}
+{% block page_title %}System Reporting & Exports{% endblock %}
 {% block sidebar %}{% include "partials/sidebar_operations_manager.html" %}{% endblock %}
 
 {% block content %}
-<div class="kq-page-header">
-    <h4><i class="bi bi-file-earmark-bar-graph me-2" style="color: var(--kq-primary);"></i>Generate System Reports & Forecasts</h4>
-    <p class="text-muted">Configure filters to extract historical revenue or predictive flight demand matrices</p>
+<div class="kq-page-header mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+            <h4><i class="bi bi-file-earmark-bar-graph me-2" style="color: var(--kq-primary);"></i>Generate System Reports &amp; Statements</h4>
+            <p class="text-muted mb-0">Extract operational revenue logs, predictive demand matrices, or export official statements</p>
+        </div>
+        <div>
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <i class="bi bi-clock-history me-1 text-primary"></i> Live Extraction Engine
+            </span>
+        </div>
+    </div>
 </div>
 
-<div class="card" style="max-width: 720px;">
-    <div class="card-body">
-        <div class="mb-3">
-            <label class="form-label">Report Type Category</label>
-            <select class="form-select">
-                <option>Demand Forecast Matrix (Next 30 Days)</option>
-                <option>Customer Segmentation</option>
-                <option>Sales Trend</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Date Range Period</label>
-            <input type="text" class="form-control" placeholder="e.g. 2026-03-01 to 2026-03-31">
-        </div>
+<!-- Configuration Form Card -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white py-3">
+        <h6 class="fw-bold mb-0">
+            <i class="bi bi-sliders2 me-2 text-primary"></i>Report Parameters &amp; Filter Options
+        </h6>
+    </div>
+    <div class="card-body p-4">
+        <form method="get" action="{% url 'analytics:generate_reports' %}">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-5 col-md-12">
+                    <label class="form-label small fw-semibold">Report Category Type <span class="text-danger">*</span></label>
+                    <select name="report_type" class="form-select">
+                        {% for val, label in report_types %}
+                        <option value="{{ val }}" {% if report_type == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-3 col-sm-6">
+                    <label class="form-label small fw-semibold">From Date</label>
+                    <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
+                </div>
+                <div class="col-lg-4 col-sm-6">
+                    <label class="form-label small fw-semibold">To Date</label>
+                    <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
+                </div>
+            </div>
 
-        <!-- Report preview area -->
-        <div class="rounded-3 p-4 mb-3" style="background: var(--kq-surface-alt); border: 1px dashed var(--kq-border); min-height: 180px;">
-            <div class="kq-empty-state py-3">
-                <i class="bi bi-file-earmark-text" style="font-size: 2rem; opacity: 0.3;"></i>
-                <p class="small mt-2 mb-0">Report preview will appear here</p>
-                <p class="text-muted" style="font-size: 0.72rem;">Select a report type and generate to view results</p>
+            <div class="d-flex gap-2 justify-content-end flex-wrap mt-4 pt-3 border-top">
+                <button type="submit" name="action" value="preview" class="btn btn-dark">
+                    <i class="bi bi-table me-1"></i> Preview Report
+                </button>
+                <button type="submit" name="action" value="csv" class="btn btn-outline-success">
+                    <i class="bi bi-filetype-csv me-1"></i> Export CSV
+                </button>
+                <button type="submit" name="action" value="pdf" class="btn btn-outline-danger">
+                    <i class="bi bi-filetype-pdf me-1"></i> Export PDF Statement
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Report Preview Area -->
+<div class="card shadow-sm">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h6 class="fw-bold mb-0 text-dark">
+                <i class="bi bi-eye me-2 text-primary"></i>{{ title }}
+            </h6>
+            <span class="small text-muted">{{ subtitle }}</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-light text-dark border">{{ rows|length }} row(s) returned</span>
+            <div class="btn-group btn-group-sm">
+                <a href="?report_type={{ report_type }}&date_from={{ date_from }}&date_to={{ date_to }}&action=csv" class="btn btn-outline-success btn-sm" title="Download as CSV">
+                    <i class="bi bi-download me-1"></i>CSV
+                </a>
+                <a href="?report_type={{ report_type }}&date_from={{ date_from }}&date_to={{ date_to }}&action=pdf" class="btn btn-outline-danger btn-sm" title="Download as PDF">
+                    <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                </a>
             </div>
         </div>
+    </div>
 
-        <div class="d-flex gap-2 justify-content-end">
-            <button class="btn btn-outline-secondary">
-                <i class="bi bi-filetype-csv me-1"></i>Export CSV
-            </button>
-            <button class="btn btn-dark">
-                <i class="bi bi-filetype-pdf me-1"></i>Export PDF Statement
-            </button>
+    {% if summary_text %}
+    <div class="alert alert-light border-bottom rounded-0 mb-0 py-2 px-3 small text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-info-circle-fill text-primary"></i>
+        <span><strong>Report Summary:</strong> {{ summary_text }}</span>
+    </div>
+    {% endif %}
+
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 520px;">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light sticky-top">
+                    <tr>
+                        {% for h in headers %}
+                        <th class="{% if 'Total' in h or 'Subtotal' in h or 'VAT' in h or 'Score' in h or 'Spend' in h or 'Units' in h or 'Qty' in h or 'Price' in h %}text-end{% endif %}">
+                            {{ h }}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        {% for cell in row %}
+                        <td class="{% if 'KES' in cell or 'KSh' in cell %}text-end fw-semibold{% elif forloop.counter > 4 and forloop.counter < 9 and 'sales_summary' in report_type %}text-end{% endif %}">
+                            {% if cell == 'FLAGGED ANOMALY' %}
+                            <span class="badge bg-danger">Flagged Anomaly</span>
+                            {% elif cell == 'Normal' %}
+                            <span class="badge bg-success">Normal</span>
+                            {% elif cell == 'VIP / High-Volume' %}
+                            <span class="badge bg-primary">VIP / High-Volume</span>
+                            {% elif cell == 'At-Risk / Dormant' %}
+                            <span class="badge bg-warning text-dark">At-Risk / Dormant</span>
+                            {% elif cell == 'Regular' %}
+                            <span class="badge bg-secondary">Regular</span>
+                            {% elif cell == 'Paid in Full' or cell == 'Paid' %}
+                            <span class="badge bg-success">{{ cell }}</span>
+                            {% elif cell == 'Partially Paid' or cell == 'Partial' %}
+                            <span class="badge bg-warning text-dark">{{ cell }}</span>
+                            {% elif cell == 'Unpaid' %}
+                            <span class="badge bg-danger">{{ cell }}</span>
+                            {% else %}
+                            {{ cell }}
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{{ headers|length|default:6 }}" class="text-center py-5 text-muted">
+                            <i class="bi bi-file-earmark-x fs-2 d-block mb-2 text-muted"></i>
+                            No records found for the selected category and date parameters.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
+    </div>
+    <div class="card-footer bg-white py-2 px-3 small text-muted d-flex justify-content-between align-items-center">
+        <span>Kenya Airways PLC — Executive Sales &amp; Order Intelligence Report</span>
+        <span>Generated for Operations Management</span>
     </div>
 </div>
 {% endblock %}

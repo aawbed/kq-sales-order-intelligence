@@ -6,9 +6,13 @@ class Report(models.Model):
     """Corresponds to the REPORT entity in the ERD / class diagram."""
 
     class ReportType(models.TextChoices):
+        SALES_SUMMARY = "sales_summary", "Sales Summary"
+        DEMAND_FORECAST = "demand_forecast", "Demand Forecast Matrix"
+        ANOMALY_ALERTS = "anomaly_alerts", "Anomaly Alerts"
+        CUSTOMER_SEGMENTS = "customer_segments", "Customer Segments (RFM)"
+        ACCOUNTS_RECEIVABLE = "accounts_receivable", "Accounts Receivable Summary"
         SALES_TREND = "sales_trend", "Sales Trend"
         CUSTOMER_SEGMENTATION = "customer_segmentation", "Customer Segmentation"
-        DEMAND_FORECAST = "demand_forecast", "Demand Forecast"
 
     report_id = models.AutoField(primary_key=True)
     report_type = models.CharField(max_length=30, choices=ReportType.choices)
