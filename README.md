@@ -7,10 +7,6 @@ Kenya Airways's internal water sales and order management operations, as a
 final-year project (BSc Informatics and Computer Science, Strathmore
 University).
 
-This repository implements the design specified in Chapter Three of the
-project proposal: the class diagram, entity relationship diagram, database
-schema, system architecture, and wireframes.
-
 ## Core Features
 
 - **Sales Order Management (Figure 3.7b–3.7d):** Real-time booking, line-item totals, order tracking, and flight-critical priority assignment (`Normal`, `High`, `Urgent`).
