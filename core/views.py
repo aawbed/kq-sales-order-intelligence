@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 
 from core.models import Notification
+from core.permissions import system_administrator_required
 
 
 @login_required
@@ -98,3 +99,83 @@ def mark_all_read(request):
         messages.success(request, f"Marked {count} notification(s) as read.")
     next_url = request.META.get("HTTP_REFERER") or "core:notification_list"
     return redirect(next_url)
+
+
+@system_administrator_required
+def audit_logs(request):
+    """
+    Authentication Module: Security Audit Trail.
+    Provides immutable traceability for all system operations, with filtering
+    and compliance CSV export.
+    """
+    import csv
+    from datetime import datetime
+    from django.http import HttpResponse
+    from django.db.models import Q
+    from core.models import AuditLog
+
+    action_filter = request.GET.get("action", "").strip()
+    user_filter = request.GET.get("user", "").strip()
+    date_from_str = request.GET.get("date_from", "").strip()
+    date_to_str = request.GET.get("date_to", "").strip()
+    query = request.GET.get("q", "").strip()
+
+    logs = AuditLog.objects.select_related("user").all()
+
+    if action_filter:
+        logs = logs.filter(action=action_filter)
+    if user_filter:
+        logs = logs.filter(user__username__icontains=user_filter)
+    if date_from_str:
+        try:
+            d_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+            logs = logs.filter(timestamp__date__gte=d_from)
+        except ValueError:
+            pass
+    if date_to_str:
+        try:
+            d_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+            logs = logs.filter(timestamp__date__lte=d_to)
+        except ValueError:
+            pass
+    if query:
+        logs = logs.filter(
+            Q(details__icontains=query)
+            | Q(target_id__icontains=query)
+            | Q(target_model__icontains=query)
+            | Q(ip_address__icontains=query)
+        )
+
+    if request.GET.get("export") == "csv":
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="kq_security_audit_log.csv"'
+        response.write("\ufeff".encode("utf-8"))
+        writer = csv.writer(response)
+        writer.writerow(["Timestamp", "Actor / User", "Action", "Target Model", "Target ID", "IP Address", "Details Narrative"])
+        for l in logs[:1000]:
+            actor = l.user.username if l.user else "Anonymous"
+            writer.writerow([
+                l.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                actor,
+                l.get_action_display(),
+                l.target_model,
+                l.target_id,
+                l.ip_address or "N/A",
+                l.details,
+            ])
+        return response
+
+    paginator = Paginator(logs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        "page_obj": page_obj,
+        "actions": AuditLog.Action.choices,
+        "action_filter": action_filter,
+        "user_filter": user_filter,
+        "date_from": date_from_str,
+        "date_to": date_to_str,
+        "query": query,
+    }
+    return render(request, "core/audit_log.html", context)

@@ -68,3 +68,48 @@ class Notification(models.Model):
         if notifications:
             cls.objects.bulk_create(notifications)
         return len(notifications)
+
+
+class AuditLog(models.Model):
+    """
+    Corresponds to the audit trail requirement in the Authentication Module:
+    records all user actions, including order creation, status changes, stock updates,
+    payments, user management, and login activity.
+    """
+
+    class Action(models.TextChoices):
+        LOGIN = "login", "User Login"
+        LOGOUT = "logout", "User Logout"
+        FAILED_LOGIN = "failed_login", "Failed Login Attempt"
+        ACCOUNT_LOCKOUT = "account_lockout", "Account Lockout"
+        ORDER_CREATED = "order_created", "Order Created"
+        ORDER_STATUS_CHANGED = "order_status_changed", "Order Status Updated"
+        STOCK_ADJUSTED = "stock_adjusted", "Stock Level Adjusted"
+        PAYMENT_RECORDED = "payment_recorded", "Payment Recorded"
+        SETTINGS_UPDATED = "settings_updated", "System Settings Updated"
+        USER_MODIFIED = "user_modified", "User Account Modified"
+
+    log_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    action = models.CharField(max_length=40, choices=Action.choices)
+    target_model = models.CharField(max_length=50, blank=True, default="")
+    target_id = models.CharField(max_length=50, blank=True, default="")
+    details = models.TextField(blank=True, default="")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+        verbose_name = "Audit Log Entry"
+        verbose_name_plural = "Audit Log Entries"
+
+    def __str__(self):
+        actor = self.user.username if self.user else "Anonymous"
+        return f"[{self.timestamp:%Y-%m-%d %H:%M:%S}] {actor} - {self.get_action_display()}"
+

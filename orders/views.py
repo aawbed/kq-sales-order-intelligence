@@ -40,6 +40,16 @@ def create_order(request):
                     except Exception:
                         pass
 
+                    # Audit trail
+                    from core.audit import log_action
+                    log_action(
+                        request=request,
+                        action="order_created",
+                        target_model="Order",
+                        target_id=f"KQ-{order.order_id}",
+                        details=f"Created order for {order.customer.name} (Priority: {order.get_priority_display()}) with {len(items)} line item(s).",
+                    )
+
                     messages.success(
                         request,
                         f"Order KQ-{order.order_id} created successfully "
@@ -91,6 +101,15 @@ def confirm_order(request, order_id):
     order = get_object_or_404(Order, pk=order_id)
     if order.status == Order.Status.PENDING:
         order.update_status(Order.Status.CONFIRMED)
+        from core.audit import log_action
+
+        log_action(
+            request=request,
+            action="order_status_changed",
+            target_model="Order",
+            target_id=f"KQ-{order.order_id}",
+            details="Sales Agent confirmed order; status changed from Pending to Confirmed.",
+        )
         messages.success(request, f"Order KQ-{order.order_id} confirmed.")
     else:
         messages.warning(request, f"Order KQ-{order.order_id} is already {order.get_status_display()}.")
@@ -198,6 +217,21 @@ def record_payment(request, order_id):
             payment.invoice = invoice
             payment.recorded_by = request.user
             payment.save()
+
+            from core.audit import log_action
+
+            log_action(
+                request=request,
+                action="payment_recorded",
+                target_model="Payment",
+                target_id=f"PAY-{payment.payment_id}",
+                details=(
+                    f"Recorded payment of KSh {payment.amount:,.2f} via {payment.get_method_display()} "
+                    f"(Ref: {payment.reference or 'N/A'}) for Invoice #{invoice.invoice_id} "
+                    f"(Order KQ-{order.order_id}). New invoice balance: KSh {invoice.balance:,.2f}."
+                ),
+            )
+
             messages.success(
                 request,
                 f"Payment of KSh {payment.amount:,.2f} recorded via {payment.get_method_display()} "

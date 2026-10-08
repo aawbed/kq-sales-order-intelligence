@@ -13,6 +13,17 @@ def manage_users(request):
         form = SystemUserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
+
+            from core.audit import log_action
+
+            log_action(
+                request=request,
+                action="user_modified",
+                target_model="User",
+                target_id=user.username,
+                details=f"Created staff account '{user.username}' assigned to role '{user.role}'.",
+            )
+
             messages.success(
                 request,
                 f"Account '{user.username}' created with role '{user.role}'.",
@@ -39,8 +50,20 @@ def edit_user_role(request, user_id):
         role_id = request.POST.get("role")
         if role_id:
             role = get_object_or_404(Role, pk=role_id)
+            old_role = str(target_user.role)
             target_user.role = role
             target_user.save(update_fields=["role"])
+
+            from core.audit import log_action
+
+            log_action(
+                request=request,
+                action="user_modified",
+                target_model="User",
+                target_id=target_user.username,
+                details=f"Modified role for user '{target_user.username}' from '{old_role}' to '{role}'.",
+            )
+
             messages.success(
                 request,
                 f"'{target_user.username}' is now assigned the '{role}' role.",
@@ -57,6 +80,17 @@ def toggle_user_active(request, user_id):
         target_user.is_active = not target_user.is_active
         target_user.save(update_fields=["is_active"])
         status = "activated" if target_user.is_active else "deactivated"
+
+        from core.audit import log_action
+
+        log_action(
+            request=request,
+            action="user_modified",
+            target_model="User",
+            target_id=target_user.username,
+            details=f"Account status for '{target_user.username}' set to {status}.",
+        )
+
         messages.success(request, f"'{target_user.username}' has been {status}.")
 
     return redirect("accounts:manage_users")

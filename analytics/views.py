@@ -398,6 +398,19 @@ def system_settings(request):
             settings_obj.updated_by = request.user
             settings_obj.save()
 
+            from core.audit import log_action
+
+            log_action(
+                request=request,
+                action="settings_updated",
+                target_model="SystemSetting",
+                target_id="1",
+                details=(
+                    f"Updated system configuration: Horizon={horizon}d, Contamination={contamination}, "
+                    f"Confidence={confidence}, Clusters={clusters}, AnomalyAlerts={email_alerts}, StockAlerts={stock_alerts}."
+                ),
+            )
+
             messages.success(request, "System configuration parameters saved and applied successfully.")
 
     context = {

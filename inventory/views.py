@@ -54,6 +54,16 @@ def confirm_order(request, order_id):
 
         order.update_status(Order.Status.FULFILLED)
 
+        from core.audit import log_action
+
+        log_action(
+            request=request,
+            action="order_status_changed",
+            target_model="Order",
+            target_id=f"KQ-{order.order_id}",
+            details=f"Warehouse Officer confirmed fulfilment; status changed to Fulfilled. Stock deducted for {order.items.count()} item(s).",
+        )
+
     messages.success(request, f"Order KQ-{order.order_id} fulfilled. Stock has been deducted.")
     return redirect("inventory:confirm_fulfilment")
 
@@ -84,5 +94,16 @@ def adjust_stock(request, stock_id):
             offset = form.cleaned_data["offset"]
             reason = form.cleaned_data["reason"]
             stock_item.update_level(offset, reason=reason)
+
+            from core.audit import log_action
+
+            log_action(
+                request=request,
+                action="stock_adjusted",
+                target_model="Stock",
+                target_id=f"{stock_item.product.name}",
+                details=f"Manual inventory adjustment: {offset:+d} units ({reason}). New balance: {stock_item.quantity_on_hand} units.",
+            )
+
             messages.success(request, f"{stock_item.product.name} adjusted by {offset:+d} units.")
     return redirect("inventory:stock_levels")
