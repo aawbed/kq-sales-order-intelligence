@@ -37,9 +37,9 @@ fi
 source "$VENV_DIR/bin/activate"
 
 # 3. Upgrade pip and install dependencies
-echo "[3/7] Installing project dependencies..."
-pip install --upgrade pip
-pip install -r requirements.txt
+echo "[3/7] Installing project dependencies (without caching to save disk)..."
+pip install --no-cache-dir --upgrade pip
+pip install --no-cache-dir -r requirements.txt
 
 # 4. Configure .env if not present
 if [ ! -f ".env" ]; then

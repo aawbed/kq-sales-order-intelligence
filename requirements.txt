@@ -17,7 +17,3 @@ statsmodels>=0.14.0
 
 # PDF invoice generation (ReportLab)
 reportlab>=4.0.0
-
-# Development / testing
-pytest>=8.0.0
-pytest-django>=4.8.0
