@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+{% block page_title %}ML Model Performance & Retraining{% endblock %}
+
+{% block sidebar %}
+    {% if request.user.role.role_name == "operations_manager" %}
+        {% include "partials/sidebar_operations_manager.html" %}
+    {% else %}
+        {% include "partials/sidebar_system_administrator.html" %}
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="kq-page-header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-cpu me-2" style="color: var(--kq-primary);"></i>ML Model Performance & Retraining</h4>
+        <p class="text-muted mb-0">Validation accuracy metrics, hyperparameters, and human-in-the-loop model feedback</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#retrainModal">
+            <i class="bi bi-arrow-repeat me-1"></i>Retrain Models
+        </button>
+    </div>
+</div>
+
+<!-- Quick Stat Badges -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body p-3">
+                <span class="text-muted small fw-semibold">Total Retraining Runs</span>
+                <h3 class="fw-bold mb-0 mt-1">{{ total_runs }}</h3>
+                <span class="text-muted" style="font-size: 0.75rem;">Recorded in audit logs</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body p-3">
+                <span class="text-muted small fw-semibold">SARIMAX Forecast MAE</span>
+                <h3 class="fw-bold mb-0 mt-1 text-primary">
+                    {% if latest_forecasting and latest_forecasting.metrics.mae %}
+                        {{ latest_forecasting.metrics.mae }}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </h3>
+                <span class="text-muted" style="font-size: 0.75rem;">Units daily average error</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body p-3">
+                <span class="text-muted small fw-semibold">K-Means Silhouette Score</span>
+                <h3 class="fw-bold mb-0 mt-1 text-success">
+                    {% if latest_segmentation and latest_segmentation.metrics.silhouette_score %}
+                        {{ latest_segmentation.metrics.silhouette_score }}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </h3>
+                <span class="text-muted" style="font-size: 0.75rem;">Cluster separation quality (-1 to +1)</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body p-3">
+                <span class="text-muted small fw-semibold">Human Anomaly Reviews</span>
+                <h3 class="fw-bold mb-0 mt-1 text-info">{{ total_anomalies_reviewed }}</h3>
+                <span class="text-muted" style="font-size: 0.75rem;">Feedback loop decisions</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Model Cards Grid -->
+<div class="row g-4 mb-4">
+    <!-- Model 1: SARIMAX -->
+    <div class="col-lg-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge rounded-pill bg-primary-subtle text-primary p-2">
+                        <i class="bi bi-graph-up fs-6"></i>
+                    </span>
+                    <div>
+                        <h6 class="fw-bold mb-0">Demand Forecasting</h6>
+                        <small class="text-muted">SARIMAX Time Series</small>
+                    </div>
+                </div>
+                <span class="badge {% if latest_forecasting.status == 'completed' %}bg-success{% else %}bg-secondary{% endif %}">
+                    {{ latest_forecasting.status|default:"Pending"|title }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="small text-muted mb-1">Validation Performance Metrics:</div>
+                    <div class="list-group list-group-flush border rounded-3 p-2 bg-light">
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Mean Absolute Error (MAE):</span>
+                            <span class="fw-bold">{{ latest_forecasting.metrics.mae|default:"N/A" }} units</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Root Mean Squared (RMSE):</span>
+                            <span class="fw-bold">{{ latest_forecasting.metrics.rmse|default:"N/A" }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Mean Abs % Error (MAPE):</span>
+                            <span class="fw-bold">{{ latest_forecasting.metrics.mape|default:"N/A" }}%</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Sample Horizon / History:</span>
+                            <span class="fw-bold">{{ latest_forecasting.metrics.sample_days|default:"365" }} days</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="small text-muted mb-3">
+                    <div><strong>Algorithm:</strong> SARIMAX (1,1,1)</div>
+                    <div><strong>Horizon:</strong> {{ latest_forecasting.parameters.periods|default:14 }} days ahead</div>
+                    <div><strong>Last Trained:</strong> {{ latest_forecasting.run_date|date:"Y-m-d H:i"|default:"Never" }}</div>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top py-2">
+                <form method="POST" action="{% url 'analytics:model_performance' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="target_model" value="forecasting">
+                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Retrain Forecasting
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model 2: K-Means RFM -->
+    <div class="col-lg-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge rounded-pill bg-success-subtle text-success p-2">
+                        <i class="bi bi-people fs-6"></i>
+                    </span>
+                    <div>
+                        <h6 class="fw-bold mb-0">Customer Segmentation</h6>
+                        <small class="text-muted">K-Means RFM Clustering</small>
+                    </div>
+                </div>
+                <span class="badge {% if latest_segmentation.status == 'completed' %}bg-success{% else %}bg-secondary{% endif %}">
+                    {{ latest_segmentation.status|default:"Pending"|title }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="small text-muted mb-1">Clustering Validation Metrics:</div>
+                    <div class="list-group list-group-flush border rounded-3 p-2 bg-light">
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Silhouette Coefficient:</span>
+                            <span class="fw-bold text-success">{{ latest_segmentation.metrics.silhouette_score|default:"N/A" }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Inertia (Sum of Squares):</span>
+                            <span class="fw-bold">{{ latest_segmentation.metrics.inertia|default:"N/A" }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Optimal Clusters (k):</span>
+                            <span class="fw-bold">{{ latest_segmentation.metrics.k|default:"4" }} clusters</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Accounts Evaluated:</span>
+                            <span class="fw-bold">{{ latest_segmentation.metrics.num_customers|default:"0" }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="small text-muted mb-3">
+                    <div><strong>Algorithm:</strong> K-Means + StandardScaler</div>
+                    <div><strong>Features:</strong> Recency, Frequency, Monetary</div>
+                    <div><strong>Last Trained:</strong> {{ latest_segmentation.run_date|date:"Y-m-d H:i"|default:"Never" }}</div>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top py-2">
+                <form method="POST" action="{% url 'analytics:model_performance' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="target_model" value="segmentation">
+                    <button type="submit" class="btn btn-outline-success btn-sm w-100">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Retrain Segmentation
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model 3: Isolation Forest -->
+    <div class="col-lg-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge rounded-pill bg-danger-subtle text-danger p-2">
+                        <i class="bi bi-shield-exclamation fs-6"></i>
+                    </span>
+                    <div>
+                        <h6 class="fw-bold mb-0">Anomaly Detection</h6>
+                        <small class="text-muted">Isolation Forest Ensemble</small>
+                    </div>
+                </div>
+                <span class="badge {% if latest_anomaly.status == 'completed' %}bg-success{% else %}bg-secondary{% endif %}">
+                    {{ latest_anomaly.status|default:"Pending"|title }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="small text-muted mb-1">Anomaly & Human Feedback Metrics:</div>
+                    <div class="list-group list-group-flush border rounded-3 p-2 bg-light">
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Contamination Rate:</span>
+                            <span class="fw-bold">{{ latest_anomaly.metrics.contamination_rate|default:"0.05" }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Flagged Orders:</span>
+                            <span class="fw-bold text-danger">{{ latest_anomaly.metrics.anomalies_detected|default:"0" }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Total Orders Evaluated:</span>
+                            <span class="fw-bold">{{ latest_anomaly.metrics.total_orders|default:"0" }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="text-secondary">Review Precision:</span>
+                            <span class="fw-bold text-info">
+                                {% if latest_anomaly.metrics.precision is not None %}
+                                    {% widthratio latest_anomaly.metrics.precision 1 100 %}%
+                                {% else %}
+                                    Pending Review
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="small text-muted mb-3">
+                    <div><strong>Algorithm:</strong> Isolation Forest (n_estimators=100)</div>
+                    <div><strong>Features:</strong> Quantity, Total Value, Order Frequency</div>
+                    <div><strong>Last Trained:</strong> {{ latest_anomaly.run_date|date:"Y-m-d H:i"|default:"Never" }}</div>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top py-2">
+                <form method="POST" action="{% url 'analytics:model_performance' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="target_model" value="anomaly">
+                    <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Retrain Anomaly Detector
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Historical Retraining Log Table -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+        <div>
+            <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-2"></i>Retraining History & Audit Log</h6>
+            <small class="text-muted">Complete execution log of machine learning training runs</small>
+        </div>
+        <span class="badge bg-light text-dark border">Recent 25 Runs</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Run #</th>
+                        <th>Model Type</th>
+                        <th>Execution Date</th>
+                        <th>Trained By</th>
+                        <th>Status</th>
+                        <th>Key Validation Metrics</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in history %}
+                    <tr>
+                        <td class="ps-3 fw-bold">#{{ run.run_id }}</td>
+                        <td>
+                            {% if run.model_type == 'forecasting' %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                    <i class="bi bi-graph-up me-1"></i>Demand Forecasting (SARIMAX)
+                                </span>
+                            {% elif run.model_type == 'segmentation' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                    <i class="bi bi-people me-1"></i>Customer Segmentation (K-Means)
+                                </span>
+                            {% elif run.model_type == 'anomaly' %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                    <i class="bi bi-shield-exclamation me-1"></i>Anomaly Detection (Isolation Forest)
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ run.get_model_type_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ run.run_date|date:"Y-m-d H:i:s" }}</td>
+                        <td>
+                            {% if run.trained_by %}
+                                <span class="fw-semibold">{{ run.trained_by.get_full_name|default:run.trained_by.username }}</span>
+                            {% else %}
+                                <span class="text-muted fst-italic">System Daemon / CLI</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {% if run.status == 'completed' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                                {{ run.status|title }}
+                            </span>
+                        </td>
+                        <td class="small">
+                            {% if run.model_type == 'forecasting' %}
+                                <span class="me-2">MAE: <strong>{{ run.metrics.mae|default:"N/A" }}</strong></span>
+                                <span class="me-2">RMSE: <strong>{{ run.metrics.rmse|default:"N/A" }}</strong></span>
+                                <span>MAPE: <strong>{{ run.metrics.mape|default:"N/A" }}%</strong></span>
+                            {% elif run.model_type == 'segmentation' %}
+                                <span class="me-2">Silhouette: <strong>{{ run.metrics.silhouette_score|default:"N/A" }}</strong></span>
+                                <span class="me-2">Inertia: <strong>{{ run.metrics.inertia|default:"N/A" }}</strong></span>
+                                <span>k: <strong>{{ run.metrics.k|default:"N/A" }}</strong></span>
+                            {% elif run.model_type == 'anomaly' %}
+                                <span class="me-2">Flagged: <strong>{{ run.metrics.anomalies_detected|default:"0" }}</strong></span>
+                                <span class="me-2">Rate: <strong>{{ run.metrics.contamination_rate|default:"0.05" }}</strong></span>
+                                <span>Precision: <strong>{% if run.metrics.precision is not None %}{% widthratio run.metrics.precision 1 100 %}%{% else %}N/A{% endif %}</strong></span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                            No model retraining runs recorded yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Retrain Models Dialog -->
+<div class="modal fade" id="retrainModal" tabindex="-1" aria-labelledby="retrainModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{% url 'analytics:model_performance' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="retrainModalLabel">
+                        <i class="bi bi-arrow-repeat text-primary me-2"></i>Retrain Machine Learning Models
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        Retraining re-fits the mathematical models against all confirmed historical orders, updates segment assignments, flags current anomalies, and recalibrates validation accuracy metrics.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Select Retraining Target:</label>
+                        <select name="target_model" class="form-select">
+                            <option value="all" selected>All Models (SARIMAX, K-Means & Isolation Forest)</option>
+                            <option value="forecasting">Demand Forecasting (SARIMAX) Only</option>
+                            <option value="segmentation">Customer Segmentation (K-Means) Only</option>
+                            <option value="anomaly">Order Anomaly Detection (Isolation Forest) Only</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-info py-2 px-3 small mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        This action will be recorded in the immutable Security Audit Trail.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-play-circle me-1"></i>Start Retraining
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

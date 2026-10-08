@@ -130,10 +130,20 @@ def train_and_persist_anomalies(user=None, contamination=None):
 
     results, metrics, params = detect_anomalies(orders, contamination=contamination, return_details=True)
 
+    # Compute human review feedback loop precision metrics
+    reviewed_qs = OrderAnomalyRecord.objects.exclude(review_status=OrderAnomalyRecord.ReviewStatus.PENDING)
+    total_reviewed = reviewed_qs.count()
+    confirmed_count = reviewed_qs.filter(review_status=OrderAnomalyRecord.ReviewStatus.CONFIRMED).count()
+    precision = round(confirmed_count / total_reviewed, 4) if total_reviewed > 0 else None
+
+    metrics["reviewed_count"] = total_reviewed
+    metrics["confirmed_count"] = confirmed_count
+    metrics["precision"] = precision
+
     # Collect previous human reviews to preserve audit decisions across retrains
     previous_reviews = {
         rec.order_id: (rec.review_status, rec.reviewed_by, rec.reviewed_at, rec.review_notes)
-        for rec in OrderAnomalyRecord.objects.exclude(review_status=OrderAnomalyRecord.ReviewStatus.PENDING)
+        for rec in reviewed_qs
     }
 
     with transaction.atomic():

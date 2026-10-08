@@ -13,4 +13,8 @@ urlpatterns = [
     path("receivables/", views.accounts_receivable, name="accounts_receivable"),
     # Figure 3.7k: System Settings
     path("settings/", views.system_settings, name="system_settings"),
+    # ML Model Performance & Retraining
+    path("performance/", views.model_performance, name="model_performance"),
+    # Anomaly Human-in-the-Loop Review
+    path("anomalies/<int:anomaly_id>/review/", views.review_anomaly, name="review_anomaly"),
 ]

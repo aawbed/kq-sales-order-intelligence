@@ -7,7 +7,7 @@ from io import StringIO
 from django.contrib import messages
 from django.db import models
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from analytics.models import (
@@ -19,7 +19,12 @@ from analytics.models import (
     SystemSetting,
 )
 from analytics.report_pdf import generate_report_pdf
-from core.permissions import operations_manager_required, system_administrator_required
+from core.audit import log_action
+from core.permissions import (
+    operations_manager_required,
+    operations_or_admin_required,
+    system_administrator_required,
+)
 from inventory.models import Stock
 from orders.models import Customer, Invoice, Order, OrderItem, Payment
 
@@ -556,3 +561,116 @@ def accounts_receivable(request):
         "account_types": ["KQ Internal Department", "Corporate Client", "Government Entity", "Distributor"],
     }
     return render(request, "analytics/accounts_receivable.html", context)
+
+
+@operations_or_admin_required
+def model_performance(request):
+    """
+    Model Retraining and Validation Performance Dashboard.
+    Provides real-time model evaluation metrics (MAE, RMSE, MAPE, Silhouette, Contamination, Precision)
+    and allows authorized managers and administrators to trigger retraining.
+    """
+    if request.method == "POST":
+        target = request.POST.get("target_model", "all")
+        from analytics.ml.pipeline import (
+            train_and_persist_anomalies,
+            train_and_persist_forecasting,
+            train_and_persist_segmentation,
+        )
+
+        try:
+            if target == "forecasting":
+                train_and_persist_forecasting(user=request.user)
+                messages.success(request, "Demand Forecasting (SARIMAX) retrained and validated successfully.")
+            elif target == "segmentation":
+                train_and_persist_segmentation(user=request.user)
+                messages.success(request, "Customer Segmentation (K-Means) retrained and clustered successfully.")
+            elif target == "anomaly":
+                train_and_persist_anomalies(user=request.user)
+                messages.success(request, "Order Anomaly Detection (Isolation Forest) retrained successfully.")
+            else:
+                train_and_persist_forecasting(user=request.user)
+                train_and_persist_segmentation(user=request.user)
+                train_and_persist_anomalies(user=request.user)
+                messages.success(request, "All 3 machine learning models retrained and validated successfully.")
+
+            log_action(
+                user=request.user,
+                action="retrain_ml_models",
+                target_model="MLModelRun",
+                details=f"Retrained ML model(s): {target}",
+                request=request,
+            )
+        except Exception as e:
+            messages.error(request, f"Error retraining models: {str(e)}")
+
+        return redirect("analytics:model_performance")
+
+    latest_forecasting = MLModelRun.objects.filter(
+        model_type=MLModelRun.ModelType.FORECASTING, status="completed"
+    ).first()
+    latest_segmentation = MLModelRun.objects.filter(
+        model_type=MLModelRun.ModelType.SEGMENTATION, status="completed"
+    ).first()
+    latest_anomaly = MLModelRun.objects.filter(
+        model_type=MLModelRun.ModelType.ANOMALY, status="completed"
+    ).first()
+
+    history = MLModelRun.objects.select_related("trained_by").all()[:25]
+    total_runs = MLModelRun.objects.count()
+    total_anomalies_reviewed = OrderAnomalyRecord.objects.exclude(
+        review_status=OrderAnomalyRecord.ReviewStatus.PENDING
+    ).count()
+
+    context = {
+        "latest_forecasting": latest_forecasting,
+        "latest_segmentation": latest_segmentation,
+        "latest_anomaly": latest_anomaly,
+        "history": history,
+        "total_runs": total_runs,
+        "total_anomalies_reviewed": total_anomalies_reviewed,
+    }
+    return render(request, "analytics/model_performance.html", context)
+
+
+@operations_manager_required
+def review_anomaly(request, anomaly_id):
+    """
+    Operations Manager Human-in-the-Loop review endpoint.
+    Confirms or dismisses (false positive) flagged order anomalies.
+    """
+    anomaly = get_object_or_404(OrderAnomalyRecord, pk=anomaly_id)
+    if request.method == "POST":
+        status_val = request.POST.get("review_status")
+        notes = request.POST.get("review_notes", "").strip()
+
+        if status_val in [
+            OrderAnomalyRecord.ReviewStatus.CONFIRMED,
+            OrderAnomalyRecord.ReviewStatus.FALSE_POSITIVE,
+        ]:
+            anomaly.review_status = status_val
+            anomaly.reviewed_by = request.user
+            anomaly.reviewed_at = timezone.now()
+            anomaly.review_notes = notes
+            anomaly.save()
+
+            log_action(
+                user=request.user,
+                action="review_order_anomaly",
+                target_model="OrderAnomalyRecord",
+                target_id=str(anomaly_id),
+                details=f"Order KQ-{anomaly.order.order_id} reviewed as {anomaly.get_review_status_display()}: {notes}",
+                request=request,
+            )
+            messages.success(
+                request,
+                f"Order KQ-{anomaly.order.order_id} marked as '{anomaly.get_review_status_display()}'.",
+            )
+        else:
+            messages.error(request, "Invalid review status.")
+
+    next_url = request.POST.get("next") or request.GET.get("next") or "analytics:dashboard"
+    try:
+        return redirect(next_url)
+    except Exception:
+        return redirect("analytics:dashboard")
