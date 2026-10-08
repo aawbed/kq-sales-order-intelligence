@@ -49,6 +49,12 @@ class Notification(models.Model):
     def __str__(self):
         return f"[{self.get_level_display()}] {self.title} ({self.recipient.username})"
 
+    def mark_as_read(self):
+        """Mark notification as read and save."""
+        if not self.is_read:
+            self.is_read = True
+            self.save(update_fields=["is_read"])
+
     @classmethod
     def notify_role(cls, role_name, title, message, category, level, link=""):
         """Dispatches an alert to all active users with the given role."""
