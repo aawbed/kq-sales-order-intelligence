@@ -10,7 +10,14 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 
-from analytics.models import Report, SystemSetting
+from analytics.models import (
+    CustomerSegmentRecord,
+    DemandForecastRecord,
+    MLModelRun,
+    OrderAnomalyRecord,
+    Report,
+    SystemSetting,
+)
 from analytics.report_pdf import generate_report_pdf
 from core.permissions import operations_manager_required, system_administrator_required
 from inventory.models import Stock
@@ -45,41 +52,60 @@ def dashboard(request):
     # Active customers
     active_customers = Customer.objects.count()
 
-    # --- ML Outputs (safely wrapped) ---
-    forecast_data = []
-    anomaly_data = []
-    segmentation_data = []
-
-    all_orders = Order.objects.select_related("customer").prefetch_related("items__product").all()
-
+    # --- Persisted ML Outputs ---
     system_cfg = SystemSetting.get_settings()
     forecast_horizon = system_cfg.forecast_horizon_days
     forecast_confidence = system_cfg.forecast_confidence
 
-    try:
-        from analytics.ml.forecasting import forecast_demand
-        forecast_data = forecast_demand(all_orders, periods=forecast_horizon)
-    except Exception:
-        pass
+    # 1. SARIMAX Demand Forecast
+    forecast_run = MLModelRun.objects.filter(
+        model_type=MLModelRun.ModelType.FORECASTING, status="completed"
+    ).first()
+    if not forecast_run:
+        try:
+            from analytics.ml.pipeline import train_and_persist_forecasting
+            forecast_run, _ = train_and_persist_forecasting(user=request.user)
+        except Exception:
+            forecast_run = None
 
-    try:
-        from analytics.ml.anomaly_detection import detect_anomalies
-        anomaly_data = detect_anomalies(all_orders, contamination=system_cfg.anomaly_contamination)
-    except Exception:
-        pass
+    forecast_records = (
+        list(forecast_run.forecast_records.all()[:forecast_horizon])
+        if forecast_run else []
+    )
+    forecast_labels = json.dumps([r.forecast_date.strftime("%Y-%m-%d") for r in forecast_records])
+    forecast_values = json.dumps([round(float(r.predicted_quantity), 1) for r in forecast_records])
 
-    try:
-        from analytics.ml.customer_segmentation import segment_customers
-        segmentation_data = segment_customers(
-            Customer.objects.prefetch_related("orders__items").all(),
-            n_clusters=system_cfg.customer_segment_clusters,
-        )
-    except Exception:
-        pass
+    # 2. Isolation Forest Anomalies
+    anomaly_run = MLModelRun.objects.filter(
+        model_type=MLModelRun.ModelType.ANOMALY, status="completed"
+    ).first()
+    if not anomaly_run:
+        try:
+            from analytics.ml.pipeline import train_and_persist_anomalies
+            anomaly_run, _ = train_and_persist_anomalies(user=request.user)
+        except Exception:
+            anomaly_run = None
 
-    # Prepare forecast chart data for JS
-    forecast_labels = json.dumps([row.get("date", "") for row in forecast_data[:forecast_horizon]])
-    forecast_values = json.dumps([round(float(row.get("predicted_quantity", 0)), 1) for row in forecast_data[:forecast_horizon]])
+    anomalies = (
+        list(anomaly_run.anomaly_records.select_related("order__customer", "reviewed_by").all()[:10])
+        if anomaly_run else []
+    )
+
+    # 3. K-Means Customer Segments
+    segment_run = MLModelRun.objects.filter(
+        model_type=MLModelRun.ModelType.SEGMENTATION, status="completed"
+    ).first()
+    if not segment_run:
+        try:
+            from analytics.ml.pipeline import train_and_persist_segmentation
+            segment_run, _ = train_and_persist_segmentation(user=request.user)
+        except Exception:
+            segment_run = None
+
+    segments = (
+        list(segment_run.segment_records.select_related("customer").all())
+        if segment_run else []
+    )
 
     context = {
         "recent_revenue": round(recent_revenue, 2),
@@ -90,8 +116,11 @@ def dashboard(request):
         "forecast_values": forecast_values,
         "forecast_horizon": forecast_horizon,
         "forecast_confidence": int(forecast_confidence * 100),
-        "anomalies": anomaly_data[:10],
-        "segments": segmentation_data,
+        "forecast_run": forecast_run,
+        "anomaly_run": anomaly_run,
+        "segment_run": segment_run,
+        "anomalies": anomalies,
+        "segments": segments,
     }
     return render(request, "analytics/dashboard.html", context)
 
