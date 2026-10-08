@@ -44,6 +44,9 @@
                 <i class="bi bi-exclamation-circle me-1"></i>Unpaid
             </span>
             {% endif %}
+            <a href="{% url 'orders:export_invoice_pdf' order.order_id %}" class="btn btn-outline-dark btn-sm">
+                <i class="bi bi-file-earmark-pdf me-1 text-danger"></i> Download PDF
+            </a>
             {% endif %}
         </div>
     </div>

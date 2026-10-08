@@ -140,6 +140,14 @@ class Invoice(models.Model):
         else:
             return self.PaymentStatus.PAID
 
+    def get_payment_status_display(self):
+        status_map = {
+            self.PaymentStatus.UNPAID: "Unpaid",
+            self.PaymentStatus.PARTIALLY_PAID: "Partially Paid",
+            self.PaymentStatus.PAID: "Paid in Full",
+        }
+        return status_map.get(self.payment_status, "Unpaid")
+
 
 class Payment(models.Model):
     """Corresponds to the PAYMENT entity in the ERD / class diagram."""

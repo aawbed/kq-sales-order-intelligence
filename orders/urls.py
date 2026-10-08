@@ -16,5 +16,6 @@ urlpatterns = [
     path("customers/<int:customer_id>/history/", views.customer_order_history, name="customer_order_history"),
     # Figure 3.7e: Generate Invoice & Payments
     path("<int:order_id>/invoice/", views.generate_invoice, name="generate_invoice"),
+    path("<int:order_id>/invoice/pdf/", views.export_invoice_pdf, name="export_invoice_pdf"),
     path("<int:order_id>/invoice/payment/", views.record_payment, name="record_payment"),
 ]

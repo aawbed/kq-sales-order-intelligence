@@ -2,10 +2,12 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.db import models, transaction
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from core.permissions import sales_agent_required, sales_or_operations_required
 from orders.forms import CustomerForm, OrderForm, OrderItemFormSet, PaymentForm
+from orders.invoice_pdf import generate_invoice_pdf
 from orders.models import Customer, Invoice, Order, Payment
 
 
@@ -213,3 +215,18 @@ def record_payment(request, order_id):
             )
 
     return redirect("orders:generate_invoice", order_id=order.order_id)
+
+
+@sales_or_operations_required
+def export_invoice_pdf(request, order_id):
+    """Export order tax invoice as a branded PDF document."""
+    order = get_object_or_404(
+        Order.objects.select_related("customer", "invoice").prefetch_related("items__product"),
+        pk=order_id,
+    )
+    pdf_bytes = generate_invoice_pdf(order)
+    inv_id = order.invoice.invoice_id if hasattr(order, "invoice") else order.order_id
+    filename = f"KQ_Invoice_INV-{inv_id}.pdf"
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
