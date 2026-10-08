@@ -113,3 +113,72 @@ class AuditLog(models.Model):
         actor = self.user.username if self.user else "Anonymous"
         return f"[{self.timestamp:%Y-%m-%d %H:%M:%S}] {actor} - {self.get_action_display()}"
 
+
+class LoginAttempt(models.Model):
+    """
+    Authentication Module: Tracks failed authentication attempts per username
+    and client IP to enforce account lockout after 5 consecutive failed attempts.
+    """
+
+    username = models.CharField(max_length=150, db_index=True)
+    ip_address = models.CharField(max_length=50, blank=True, default="", db_index=True)
+    failed_count = models.PositiveIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    last_attempt = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["username", "ip_address"]),
+        ]
+
+    def __str__(self):
+        return f"{self.username} ({self.ip_address}): {self.failed_count} failures"
+
+    @classmethod
+    def get_record(cls, username, ip_address=""):
+        clean_user = (username or "").lower().strip()
+        record, _ = cls.objects.get_or_create(
+            username=clean_user,
+            ip_address=ip_address or "",
+        )
+        return record
+
+    def is_locked(self):
+        from django.utils import timezone
+
+        if self.locked_until and self.locked_until > timezone.now():
+            return True
+        return False
+
+    def remaining_lockout_seconds(self):
+        from django.utils import timezone
+
+        if self.locked_until and self.locked_until > timezone.now():
+            return int((self.locked_until - timezone.now()).total_seconds())
+        return 0
+
+    def record_failure(self, request=None):
+        from datetime import timedelta
+        from django.utils import timezone
+        from core.audit import log_action
+
+        self.failed_count += 1
+        if self.failed_count >= 5:
+            self.locked_until = timezone.now() + timedelta(minutes=15)
+            log_action(
+                action="account_lockout",
+                target_model="User",
+                target_id=self.username,
+                details=f"Account '{self.username}' temporarily locked out for 15 minutes after 5 consecutive failed login attempts.",
+                request=request,
+            )
+        self.save()
+        return self.failed_count
+
+    def reset_failures(self):
+        if self.failed_count > 0 or self.locked_until is not None:
+            self.failed_count = 0
+            self.locked_until = None
+            self.save(update_fields=["failed_count", "locked_until"])
+
+

@@ -1,9 +1,76 @@
 from django.contrib import messages
+from django.contrib.auth import views as auth_views
 from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.forms import SystemUserCreationForm
 from accounts.models import Role, User
+from core.audit import get_client_ip
+from core.models import LoginAttempt
 from core.permissions import operations_manager_required, system_administrator_required
+
+
+class CustomLoginView(auth_views.LoginView):
+    """
+    Figure 3.7a: Staff Authentication with Login Attempt Limiting (5 attempts / 15-min lockout).
+    """
+
+    template_name = "accounts/login.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == "POST":
+            username = request.POST.get("username", "").strip().lower()
+            ip = get_client_ip(request)
+            attempt = LoginAttempt.get_record(username, ip)
+            if attempt.is_locked():
+                mins = max(1, (attempt.remaining_lockout_seconds() + 59) // 60)
+                lockout_msg = (
+                    f"Account security lockout: Too many consecutive failed attempts. "
+                    f"Account is locked. Please try again in {mins} minute(s)."
+                )
+                form = self.get_form()
+                return self.render_to_response(
+                    self.get_context_data(
+                        form=form,
+                        lockout_message=lockout_msg,
+                        is_locked=True,
+                    )
+                )
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_invalid(self, form):
+        username = self.request.POST.get("username", "").strip().lower()
+        ip = get_client_ip(self.request)
+        attempt = LoginAttempt.get_record(username, ip)
+        count = attempt.record_failure(request=self.request)
+
+        if attempt.is_locked():
+            lockout_msg = (
+                "Security Alert: Maximum allowed failed login attempts (5) exceeded. "
+                "This account is temporarily locked for 15 minutes."
+            )
+            return self.render_to_response(
+                self.get_context_data(
+                    form=form,
+                    lockout_message=lockout_msg,
+                    is_locked=True,
+                )
+            )
+        else:
+            remaining = 5 - count
+            warning = f"Invalid credentials. You have {remaining} attempt(s) remaining before temporary account lockout."
+            return self.render_to_response(
+                self.get_context_data(
+                    form=form,
+                    attempt_warning=warning,
+                )
+            )
+
+    def form_valid(self, form):
+        username = self.request.POST.get("username", "").strip().lower()
+        ip = get_client_ip(self.request)
+        attempt = LoginAttempt.get_record(username, ip)
+        attempt.reset_failures()
+        return super().form_valid(form)
 
 
 @operations_manager_required

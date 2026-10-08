@@ -173,3 +173,8 @@ LOGOUT_REDIRECT_URL = 'accounts:login'
 # Alert notification dispatch (Console email backend prints alerts to stdout in development)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'alerts@kenya-airways.com'
+
+# Session Security & Inactivity Timeout (Authentication Module)
+SESSION_COOKIE_AGE = 1800  # 30-minute session duration
+SESSION_SAVE_EVERY_REQUEST = True  # Rolling idle session timeout
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True

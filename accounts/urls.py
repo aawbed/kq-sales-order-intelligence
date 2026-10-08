@@ -7,7 +7,7 @@ app_name = "accounts"
 
 urlpatterns = [
     # Figure 3.7a: Login Screen
-    path("login/", auth_views.LoginView.as_view(template_name="accounts/login.html"), name="login"),
+    path("login/", views.CustomLoginView.as_view(), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     # Figure 3.7j: Manage User Accounts (Operations Manager / System Administrator)
     path("users/", views.manage_users, name="manage_users"),
