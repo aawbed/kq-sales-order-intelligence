@@ -27,6 +27,8 @@ def role_required(*role_names):
         @wraps(view_func)
         @login_required
         def _wrapped(request, *args, **kwargs):
+            if getattr(request.user, "is_superuser", False):
+                return view_func(request, *args, **kwargs)
             user_role = getattr(request.user, "role", None)
             if user_role is None or user_role.role_name not in role_names:
                 raise PermissionDenied("You do not have access to this screen.")

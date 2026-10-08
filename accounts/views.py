@@ -6,7 +6,7 @@ from accounts.forms import SystemUserCreationForm
 from accounts.models import Role, User
 from core.audit import get_client_ip
 from core.models import LoginAttempt
-from core.permissions import operations_manager_required, system_administrator_required
+from core.permissions import operations_or_admin_required, system_administrator_required
 
 
 class CustomLoginView(auth_views.LoginView):
@@ -73,7 +73,7 @@ class CustomLoginView(auth_views.LoginView):
         return super().form_valid(form)
 
 
-@operations_manager_required
+@operations_or_admin_required
 def manage_users(request):
     """Figure 3.7j: Manage User Accounts — list all staff and create new users."""
     if request.method == "POST":

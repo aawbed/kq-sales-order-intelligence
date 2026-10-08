@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block page_title %}Identity & Access Management{% endblock %}
-{% block sidebar %}{% include "partials/sidebar_operations_manager.html" %}{% endblock %}
+{% block sidebar %}
+    {% if user.role.role_name == "system_administrator" or user.is_superuser %}
+        {% include "partials/sidebar_system_administrator.html" %}
+    {% else %}
+        {% include "partials/sidebar_operations_manager.html" %}
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="kq-page-header">
