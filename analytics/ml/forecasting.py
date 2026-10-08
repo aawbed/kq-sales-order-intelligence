@@ -12,12 +12,20 @@ import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 
-def forecast_demand(order_queryset, periods=30):
+def forecast_demand(order_queryset, periods=None):
     """
     Fit a SARIMAX model on historical order volume and return a
     forecast for the given number of future periods.
     """
     try:
+        if periods is None:
+            try:
+                from analytics.models import SystemSetting
+                periods = SystemSetting.get_settings().forecast_horizon_days
+            except Exception:
+                periods = 30
+        periods = max(7, min(90, int(periods)))
+
         from orders.models import OrderItem
         items = OrderItem.objects.filter(order__in=order_queryset).select_related('order')
         if not items.exists():

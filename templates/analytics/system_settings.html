@@ -8,53 +8,162 @@
     <p class="text-muted">Calibrate machine learning thresholds and automated notifications</p>
 </div>
 
-<div class="card" style="max-width: 720px;">
-    <div class="card-body">
-        <!-- ML Parameters -->
-        <div class="d-flex align-items-center gap-2 mb-3">
-            <div class="rounded-3 d-flex align-items-center justify-content-center"
-                 style="width: 32px; height: 32px; background: var(--kq-info-bg);">
-                <i class="bi bi-cpu" style="color: var(--kq-info);"></i>
-            </div>
-            <h6 class="fw-bold mb-0">Demand Forecasting Parameters</h6>
-        </div>
-        <div class="row mb-4">
-            <div class="col-sm-6 mb-3 mb-sm-0">
-                <label class="form-label">ML Confidence Threshold</label>
-                <input type="number" step="0.01" class="form-control" value="0.85">
-            </div>
-            <div class="col-sm-6">
-                <label class="form-label">Forecasting Cache Timeout (mins)</label>
-                <input type="number" class="form-control" value="60">
-            </div>
-        </div>
+<div class="card" style="max-width: 780px;">
+    <div class="card-body p-4">
+        <form method="POST" action="{% url 'analytics:system_settings' %}">
+            {% csrf_token %}
 
-        <!-- Notifications -->
-        <div class="d-flex align-items-center gap-2 mb-3">
-            <div class="rounded-3 d-flex align-items-center justify-content-center"
-                 style="width: 32px; height: 32px; background: var(--kq-warning-bg);">
-                <i class="bi bi-bell" style="color: var(--kq-warning);"></i>
+            <!-- Section 1: Demand Forecasting Parameters -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="rounded-3 d-flex align-items-center justify-content-center"
+                     style="width: 34px; height: 34px; background: var(--kq-info-bg);">
+                    <i class="bi bi-cpu" style="color: var(--kq-info); font-size: 1.1rem;"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-0">Demand Forecasting Parameters</h6>
+                    <small class="text-muted">Controls SARIMAX time-series statistical models</small>
+                </div>
             </div>
-            <h6 class="fw-bold mb-0">Notification Dispatch Channels</h6>
-        </div>
-        <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" checked id="anomalyAlert">
-            <label class="form-check-label" for="anomalyAlert">
-                Send immediate email alerts to Operations Manager on high-priority ML anomalies
-            </label>
-        </div>
-        <div class="form-check mb-4">
-            <input class="form-check-input" type="checkbox" checked id="stockAlert">
-            <label class="form-check-label" for="stockAlert">
-                Notify Warehouse Officer immediately on critical low stock components
-            </label>
-        </div>
 
-        <div class="text-end pt-3" style="border-top: 1px solid var(--kq-border-light);">
-            <button class="btn btn-dark">
-                <i class="bi bi-check-lg me-1"></i>Save Configuration
-            </button>
-        </div>
+            <div class="row g-3 mb-4">
+                <div class="col-sm-4">
+                    <label class="form-label small fw-semibold">Confidence Threshold</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" min="0.50" max="0.99" name="forecast_confidence" 
+                               class="form-control {% if errors.forecast_confidence %}is-invalid{% endif %}" 
+                               value="{{ settings.forecast_confidence }}">
+                        <span class="input-group-text small">%</span>
+                    </div>
+                    {% if errors.forecast_confidence %}
+                        <div class="text-danger small mt-1">{{ errors.forecast_confidence }}</div>
+                    {% else %}
+                        <small class="text-muted">Between 0.50 and 0.99 (default 0.85)</small>
+                    {% endif %}
+                </div>
+
+                <div class="col-sm-4">
+                    <label class="form-label small fw-semibold">Forecast Horizon (Days)</label>
+                    <div class="input-group">
+                        <input type="number" min="7" max="90" name="forecast_horizon_days" 
+                               class="form-control {% if errors.forecast_horizon_days %}is-invalid{% endif %}" 
+                               value="{{ settings.forecast_horizon_days }}">
+                        <span class="input-group-text small">days</span>
+                    </div>
+                    {% if errors.forecast_horizon_days %}
+                        <div class="text-danger small mt-1">{{ errors.forecast_horizon_days }}</div>
+                    {% else %}
+                        <small class="text-muted">Range: 7 to 90 days ahead</small>
+                    {% endif %}
+                </div>
+
+                <div class="col-sm-4">
+                    <label class="form-label small fw-semibold">Cache Timeout</label>
+                    <div class="input-group">
+                        <input type="number" min="5" max="1440" name="forecast_cache_timeout" 
+                               class="form-control {% if errors.forecast_cache_timeout %}is-invalid{% endif %}" 
+                               value="{{ settings.forecast_cache_timeout }}">
+                        <span class="input-group-text small">mins</span>
+                    </div>
+                    {% if errors.forecast_cache_timeout %}
+                        <div class="text-danger small mt-1">{{ errors.forecast_cache_timeout }}</div>
+                    {% else %}
+                        <small class="text-muted">Computation caching window</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr style="border-color: var(--kq-border-light); margin: 1.5rem 0;">
+
+            <!-- Section 2: Machine Learning Intelligence -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="rounded-3 d-flex align-items-center justify-content-center"
+                     style="width: 34px; height: 34px; background: #e0f2fe;">
+                    <i class="bi bi-diagram-3" style="color: #0284c7; font-size: 1.1rem;"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-0">Anomaly Detection & Customer Clustering</h6>
+                    <small class="text-muted">Governs Isolation Forest and K-Means RFM segmentation</small>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6">
+                    <label class="form-label small fw-semibold">Anomaly Contamination Rate</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" min="0.01" max="0.20" name="anomaly_contamination" 
+                               class="form-control {% if errors.anomaly_contamination %}is-invalid{% endif %}" 
+                               value="{{ settings.anomaly_contamination }}">
+                        <span class="input-group-text small">rate</span>
+                    </div>
+                    {% if errors.anomaly_contamination %}
+                        <div class="text-danger small mt-1">{{ errors.anomaly_contamination }}</div>
+                    {% else %}
+                        <small class="text-muted">Expected outlier fraction (0.01 = 1% to 0.20 = 20%)</small>
+                    {% endif %}
+                </div>
+
+                <div class="col-sm-6">
+                    <label class="form-label small fw-semibold">Customer Segment Clusters (k)</label>
+                    <div class="input-group">
+                        <input type="number" min="2" max="6" name="customer_segment_clusters" 
+                               class="form-control {% if errors.customer_segment_clusters %}is-invalid{% endif %}" 
+                               value="{{ settings.customer_segment_clusters }}">
+                        <span class="input-group-text small">clusters</span>
+                    </div>
+                    {% if errors.customer_segment_clusters %}
+                        <div class="text-danger small mt-1">{{ errors.customer_segment_clusters }}</div>
+                    {% else %}
+                        <small class="text-muted">Number of behavioral RFM clusters (2 to 6)</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr style="border-color: var(--kq-border-light); margin: 1.5rem 0;">
+
+            <!-- Section 3: Notification Dispatch Channels -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="rounded-3 d-flex align-items-center justify-content-center"
+                     style="width: 34px; height: 34px; background: var(--kq-warning-bg);">
+                    <i class="bi bi-bell" style="color: var(--kq-warning); font-size: 1.1rem;"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-0">Notification Dispatch Channels</h6>
+                    <small class="text-muted">System-wide automated alert dispatching preferences</small>
+                </div>
+            </div>
+
+            <div class="form-check p-3 rounded-2 mb-2" style="background: #fafafa; border: 1px solid var(--kq-border-light);">
+                <input class="form-check-input ms-0 me-2" type="checkbox" name="email_alerts_anomaly" 
+                       id="anomalyAlert" {% if settings.email_alerts_anomaly %}checked{% endif %}>
+                <label class="form-check-label fw-semibold" for="anomalyAlert">
+                    Send immediate email alerts to Operations Manager on high-priority ML anomalies
+                </label>
+                <div class="text-muted small ps-4">Triggers when Isolation Forest detects order volumes or monetary sizes exceeding threshold.</div>
+            </div>
+
+            <div class="form-check p-3 rounded-2 mb-4" style="background: #fafafa; border: 1px solid var(--kq-border-light);">
+                <input class="form-check-input ms-0 me-2" type="checkbox" name="stock_alerts_warehouse" 
+                       id="stockAlert" {% if settings.stock_alerts_warehouse %}checked{% endif %}>
+                <label class="form-check-label fw-semibold" for="stockAlert">
+                    Notify Warehouse Officer immediately on critical low stock components
+                </label>
+                <div class="text-muted small ps-4">Triggers when warehouse quantity on hand drops below predefined reorder levels.</div>
+            </div>
+
+            <!-- Footer: Timestamp & Action button -->
+            <div class="d-flex justify-content-between align-items-center pt-3" style="border-top: 1px solid var(--kq-border-light);">
+                <div class="text-muted small">
+                    <i class="bi bi-clock-history me-1"></i>Last saved: 
+                    <strong>{{ settings.updated_at|date:"M d, Y H:i" }}</strong>
+                    {% if settings.updated_by %}
+                        by <span class="badge bg-light text-dark border">{{ settings.updated_by.get_full_name|default:settings.updated_by.username }}</span>
+                    {% endif %}
+                </div>
+                <button type="submit" class="btn btn-dark px-4">
+                    <i class="bi bi-check-lg me-1"></i>Save Configuration
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}

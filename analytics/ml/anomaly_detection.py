@@ -10,12 +10,20 @@ Manager's ML Anomaly Detector panel on the Sales Dashboard.
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 
-def detect_anomalies(order_queryset):
+def detect_anomalies(order_queryset, contamination=None):
     """
     Run Isolation Forest over recent order records and return a list
     of flagged anomalies with a short human-readable description.
     """
     try:
+        if contamination is None:
+            try:
+                from analytics.models import SystemSetting
+                contamination = SystemSetting.get_settings().anomaly_contamination
+            except Exception:
+                contamination = 0.05
+        contamination = max(0.01, min(0.25, float(contamination)))
+
         if not order_queryset.exists():
             return []
 
@@ -42,7 +50,7 @@ def detect_anomalies(order_queryset):
         df = pd.DataFrame(data)
         features = df[['quantity', 'total_value', 'freq']]
         
-        iso = IsolationForest(contamination=0.05, random_state=42)
+        iso = IsolationForest(contamination=contamination, random_state=42)
         df['is_anomaly'] = iso.fit_predict(features)
         df['anomaly_score'] = iso.decision_function(features)
         

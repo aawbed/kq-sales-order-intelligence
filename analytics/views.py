@@ -4,12 +4,13 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from io import StringIO
 
+from django.contrib import messages
 from django.db import models
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 
-from analytics.models import Report
+from analytics.models import Report, SystemSetting
 from analytics.report_pdf import generate_report_pdf
 from core.permissions import operations_manager_required, system_administrator_required
 from inventory.models import Stock
@@ -51,27 +52,34 @@ def dashboard(request):
 
     all_orders = Order.objects.select_related("customer").prefetch_related("items__product").all()
 
+    system_cfg = SystemSetting.get_settings()
+    forecast_horizon = system_cfg.forecast_horizon_days
+    forecast_confidence = system_cfg.forecast_confidence
+
     try:
         from analytics.ml.forecasting import forecast_demand
-        forecast_data = forecast_demand(all_orders)
+        forecast_data = forecast_demand(all_orders, periods=forecast_horizon)
     except Exception:
         pass
 
     try:
         from analytics.ml.anomaly_detection import detect_anomalies
-        anomaly_data = detect_anomalies(all_orders)
+        anomaly_data = detect_anomalies(all_orders, contamination=system_cfg.anomaly_contamination)
     except Exception:
         pass
 
     try:
         from analytics.ml.customer_segmentation import segment_customers
-        segmentation_data = segment_customers(Customer.objects.prefetch_related("orders__items").all())
+        segmentation_data = segment_customers(
+            Customer.objects.prefetch_related("orders__items").all(),
+            n_clusters=system_cfg.customer_segment_clusters,
+        )
     except Exception:
         pass
 
     # Prepare forecast chart data for JS
-    forecast_labels = json.dumps([row.get("date", "") for row in forecast_data[:30]])
-    forecast_values = json.dumps([round(float(row.get("predicted_quantity", 0)), 1) for row in forecast_data[:30]])
+    forecast_labels = json.dumps([row.get("date", "") for row in forecast_data[:forecast_horizon]])
+    forecast_values = json.dumps([round(float(row.get("predicted_quantity", 0)), 1) for row in forecast_data[:forecast_horizon]])
 
     context = {
         "recent_revenue": round(recent_revenue, 2),
@@ -80,6 +88,8 @@ def dashboard(request):
         "active_customers": active_customers,
         "forecast_labels": forecast_labels,
         "forecast_values": forecast_values,
+        "forecast_horizon": forecast_horizon,
+        "forecast_confidence": int(forecast_confidence * 100),
         "anomalies": anomaly_data[:10],
         "segments": segmentation_data,
     }
@@ -321,8 +331,80 @@ def generate_reports(request):
 
 @system_administrator_required
 def system_settings(request):
-    """Figure 3.7k: System Administrator — System Settings."""
-    return render(request, "analytics/system_settings.html")
+    """
+    Figure 3.7k: System Administrator — System Configuration Parameters.
+    Exposes configurable machine learning thresholds and automated notification preferences.
+    """
+    settings_obj = SystemSetting.get_settings()
+    errors = {}
+
+    if request.method == "POST":
+        confidence_str = request.POST.get("forecast_confidence", "").strip()
+        horizon_str = request.POST.get("forecast_horizon_days", "").strip()
+        cache_timeout_str = request.POST.get("forecast_cache_timeout", "").strip()
+        contamination_str = request.POST.get("anomaly_contamination", "").strip()
+        clusters_str = request.POST.get("customer_segment_clusters", "").strip()
+        email_alerts = request.POST.get("email_alerts_anomaly") == "on"
+        stock_alerts = request.POST.get("stock_alerts_warehouse") == "on"
+
+        # Validate confidence (0.50 - 0.99)
+        try:
+            confidence = float(confidence_str)
+            if not (0.50 <= confidence <= 0.99):
+                errors["forecast_confidence"] = "Confidence threshold must be between 0.50 and 0.99."
+        except ValueError:
+            errors["forecast_confidence"] = "Please enter a valid decimal number."
+
+        # Validate horizon (7 - 90 days)
+        try:
+            horizon = int(horizon_str)
+            if not (7 <= horizon <= 90):
+                errors["forecast_horizon_days"] = "Forecast horizon must be between 7 and 90 days."
+        except ValueError:
+            errors["forecast_horizon_days"] = "Please enter a valid whole number of days."
+
+        # Validate cache timeout (5 - 1440 mins)
+        try:
+            cache_timeout = int(cache_timeout_str)
+            if not (5 <= cache_timeout <= 1440):
+                errors["forecast_cache_timeout"] = "Cache timeout must be between 5 and 1440 minutes."
+        except ValueError:
+            errors["forecast_cache_timeout"] = "Please enter a valid whole number of minutes."
+
+        # Validate anomaly contamination (0.01 - 0.20)
+        try:
+            contamination = float(contamination_str)
+            if not (0.01 <= contamination <= 0.20):
+                errors["anomaly_contamination"] = "Contamination rate must be between 0.01 (1%) and 0.20 (20%)."
+        except ValueError:
+            errors["anomaly_contamination"] = "Please enter a valid decimal rate."
+
+        # Validate clusters (2 - 6)
+        try:
+            clusters = int(clusters_str)
+            if not (2 <= clusters <= 6):
+                errors["customer_segment_clusters"] = "Number of customer segments must be between 2 and 6."
+        except ValueError:
+            errors["customer_segment_clusters"] = "Please enter an integer between 2 and 6."
+
+        if not errors:
+            settings_obj.forecast_confidence = confidence
+            settings_obj.forecast_horizon_days = horizon
+            settings_obj.forecast_cache_timeout = cache_timeout
+            settings_obj.anomaly_contamination = contamination
+            settings_obj.customer_segment_clusters = clusters
+            settings_obj.email_alerts_anomaly = email_alerts
+            settings_obj.stock_alerts_warehouse = stock_alerts
+            settings_obj.updated_by = request.user
+            settings_obj.save()
+
+            messages.success(request, "System configuration parameters saved and applied successfully.")
+
+    context = {
+        "settings": settings_obj,
+        "errors": errors,
+    }
+    return render(request, "analytics/system_settings.html", context)
 
 
 @operations_manager_required

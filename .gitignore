@@ -17,6 +17,7 @@ db.sqlite3-journal
 media/
 staticfiles/
 *.log
+*.csv
 
 # Editors / OS
 .vscode/

@@ -32,3 +32,60 @@ class Report(models.Model):
 
         data = run_report_pipeline(report_type, **kwargs)
         return cls.objects.create(report_type=report_type, generated_by=generated_by, data=data)
+
+
+class SystemSetting(models.Model):
+    """
+    Figure 3.7k: System Administrator — System Configuration Parameters.
+    Stores configurable machine learning hyperparameters and automated notification preferences.
+    """
+
+    forecast_confidence = models.FloatField(
+        default=0.85,
+        help_text="Statistical confidence threshold for forecasting (0.50 - 0.99).",
+    )
+    forecast_horizon_days = models.PositiveIntegerField(
+        default=30,
+        help_text="Demand forecast horizon in days (7 - 90).",
+    )
+    forecast_cache_timeout = models.PositiveIntegerField(
+        default=60,
+        help_text="Forecasting computation cache timeout in minutes (5 - 1440).",
+    )
+    anomaly_contamination = models.FloatField(
+        default=0.05,
+        help_text="Expected proportion of anomalies in order stream (0.01 - 0.20).",
+    )
+    customer_segment_clusters = models.PositiveIntegerField(
+        default=3,
+        help_text="Number of behavioral RFM clusters (2 - 6).",
+    )
+    email_alerts_anomaly = models.BooleanField(
+        default=True,
+        help_text="Send immediate email alerts to Operations Manager on high-priority ML anomalies.",
+    )
+    stock_alerts_warehouse = models.BooleanField(
+        default=True,
+        help_text="Notify Warehouse Officer immediately on critical low stock components.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="settings_updated",
+    )
+
+    class Meta:
+        verbose_name = "System Setting"
+        verbose_name_plural = "System Settings"
+
+    def __str__(self):
+        return f"System Configuration (Updated {self.updated_at:%Y-%m-%d %H:%M})"
+
+    @classmethod
+    def get_settings(cls):
+        """Retrieve the singleton settings record, creating default if not found."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
