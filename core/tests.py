@@ -56,3 +56,42 @@ class CoreAuditAndNotificationTests(TestCase):
         # Mark as read
         note.mark_as_read()
         self.assertTrue(note.is_read)
+
+    def test_demo_role_switcher_blocks_unauthorized_escalation(self):
+        from django.urls import reverse
+
+        role_sales = Role.objects.create(role_name=Role.RoleName.SALES_AGENT)
+        User.objects.create_user(username="admin", password="Password123!", role=self.role_admin, is_superuser=True)
+        User.objects.create_user(username="sales", password="Password123!", role=role_sales)
+
+        # Direct non-admin login must receive 403 when attempting to switch to admin
+        self.client.login(username="sales", password="Password123!")
+        resp = self.client.get(reverse("core:switch_demo_role", args=["admin"]))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_mark_notification_read_blocks_external_open_redirect(self):
+        from django.urls import reverse
+
+        note = Notification.objects.create(
+            recipient=self.user,
+            title="Test",
+            message="Body",
+            category=Notification.Category.SYSTEM,
+        )
+        self.client.force_login(self.user)
+        resp = self.client.get(
+            reverse("core:mark_notification_read", args=[note.notification_id])
+            + "?next=https://evil.example.com/phish"
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp["Location"], reverse("core:notification_list"))
+
+    def test_mark_all_read_requires_post(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.user)
+        get_resp = self.client.get(reverse("core:mark_all_read"))
+        self.assertEqual(get_resp.status_code, 405)
+        post_resp = self.client.post(reverse("core:mark_all_read"))
+        self.assertEqual(post_resp.status_code, 302)
+

@@ -2,8 +2,9 @@ import os
 import random
 from decimal import Decimal
 from datetime import timedelta
+from django.conf import settings
 from django.utils import timezone
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from orders.models import Customer, Order, OrderItem, Invoice, Payment
 from inventory.models import Product, Stock
 from accounts.models import Role, User
@@ -12,7 +13,20 @@ from accounts.models import Role, User
 class Command(BaseCommand):
     help = 'Seeds the database with demo data for operations, invoices, payments, and ML models'
 
-    def handle(self, *args, **kwargs):
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Force seeding and wiping existing data even when DEBUG is False.",
+        )
+
+    def handle(self, *args, **options):
+        if not settings.DEBUG and not options.get("force"):
+            raise CommandError(
+                "Refusing to wipe and seed demo data when DEBUG=False. "
+                "Pass --force if you explicitly intend to reset this environment."
+            )
+
         # 0. Ensure Roles and Demo Accounts
         roles = {}
         for role_name, _ in Role.RoleName.choices:

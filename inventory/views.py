@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.db import models, transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from core.permissions import warehouse_officer_required
 from inventory.forms import ProductForm, StockAdjustmentForm
@@ -33,6 +34,7 @@ def confirm_fulfilment(request):
 
 
 @warehouse_officer_required
+@require_POST
 def confirm_order(request, order_id):
     """Mark order as fulfilled AND deduct stock for each item."""
     order = get_object_or_404(

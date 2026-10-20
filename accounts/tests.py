@@ -117,3 +117,17 @@ class AccountsAndSecurityTests(TestCase):
         self.assertEqual(shared_view(req), "shared_ok")
         with self.assertRaises(PermissionDenied):
             sales_view(req)
+
+    def test_non_admin_cannot_create_system_administrator_account(self):
+        from accounts.forms import SystemUserCreationForm
+
+        # Operations Manager form should exclude System Administrator role
+        ops_form = SystemUserCreationForm(current_user=self.user_op)
+        ops_role_names = list(ops_form.fields["role"].queryset.values_list("role_name", flat=True))
+        self.assertNotIn(Role.RoleName.SYSTEM_ADMINISTRATOR, ops_role_names)
+
+        # System Administrator form should include System Administrator role
+        admin_form = SystemUserCreationForm(current_user=self.user_admin)
+        admin_role_names = list(admin_form.fields["role"].queryset.values_list("role_name", flat=True))
+        self.assertIn(Role.RoleName.SYSTEM_ADMINISTRATOR, admin_role_names)
+

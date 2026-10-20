@@ -46,8 +46,21 @@ class SystemUserCreationForm(UserCreationForm):
             }),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, current_user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.current_user = current_user
+        is_admin = bool(
+            current_user is None
+            or getattr(current_user, "is_superuser", False)
+            or (
+                getattr(current_user, "role", None) is not None
+                and current_user.role.role_name == Role.RoleName.SYSTEM_ADMINISTRATOR
+            )
+        )
+        if not is_admin:
+            self.fields["role"].queryset = Role.objects.exclude(
+                role_name=Role.RoleName.SYSTEM_ADMINISTRATOR
+            )
         self.fields["password1"].widget.attrs.update({
             "class": "form-control",
             "placeholder": "Set a secure password",
