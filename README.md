@@ -24,10 +24,30 @@ University).
 
 | Role | Default Landing Screen | Primary Responsibilities |
 |---|---|---|
-| **Sales Agent** | `/orders/create/` | Create orders, track fulfilment status, review customer order history |
-| **Warehouse Officer** | `/inventory/stock/` | Monitor stock levels, adjust inventory, confirm dispatches with stock deduction |
+| **Sales Agent** | `/orders/track/` | Create orders, track fulfilment status, review customer order history |
+| **Warehouse Officer** | `/inventory/fulfilment/` | Confirm dispatches with stock deduction, monitor stock levels, adjust inventory |
 | **Operations Manager** | `/analytics/dashboard/` | Executive dashboard, demand forecasts, review ML anomalies, generate PDF reports, AR |
 | **System Administrator** | `/analytics/settings/` | User administration, calibrate ML hyperparameters, audit trail monitoring |
+
+## Project Structure
+
+```text
+kq-sales-order-intelligence/
+├── .github/workflows/django.yml   # GitHub Actions CI pipeline (migrations + unit & integration tests)
+├── accounts/                      # Custom User & Role models, RBAC login, brute-force lockout, profile
+├── analytics/                     # Executive dashboard, AR aging, PDF/CSV reports, SystemSetting
+│   └── ml/                        # ML pipeline: SARIMAX forecasting, K-Means RFM, Isolation Forest
+├── config/                        # Django project settings, root URL routing, WSGI/ASGI entrypoints
+├── core/                          # RBAC decorators, immutable AuditLog, Notification engine, seed commands
+├── docs/                          # End-user operational manual & production deployment guide
+├── inventory/                     # Product catalogue, Stock levels, low-stock alerts, fulfilment queue
+├── orders/                        # Customer registry, Order & OrderItem workflow, VAT Invoices & Payments
+├── static/                        # Custom KQ stylesheet (custom.css) and Chart.js dashboard scripts
+├── templates/                     # Role-tailored Bootstrap 5 templates & printable statement views
+├── .env.example                   # Environment variable template (SQLite dev / MySQL production)
+├── manage.py                      # Django CLI management entrypoint
+└── requirements.txt               # Pinned Python & ML dependencies
+```
 
 ## Documentation
 
@@ -79,3 +99,14 @@ University).
    ```
 
    Visit `http://127.0.0.1:8000/accounts/login/` to sign in.
+
+## Versioning & Releases
+
+- **`v1.0.0` — Initial End-to-End Prototype:** Core 4-role RBAC, Order-to-Cash workflow, and baseline ML modules.
+- **`v1.1.0` — Presentation & Demo Mode Release:** Branded KQ UI overhaul, presentation role switcher, PDF/CSV exports, and 27 automated tests.
+- **`v1.2.0` — Security Hardening, Workflow Validation & Seasonal ML Release:** Restricted demo persona switching, strict state-machine and stock sufficiency enforcement, weekly SARIMAX seasonality (`s=7`), and composite RFM clustering.
+
+## Licence & Access Conditions
+
+This repository is developed and submitted as an academic final-year project for the **Bachelor of Science in Informatics and Computer Science** at **Strathmore University**. All source code is publicly accessible for academic examination and supervisor evaluation under educational use terms.
+

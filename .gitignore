@@ -30,4 +30,11 @@ Thumbs.db
 htmlcov/
 .coverage
 
-staticfiles/
+# Local academic / grading documents (keep on disk, do not track in repo)
+~$*
+docs/*.docx
+docs/*.pdf
+docs/*.pptx
+docs/Proposal*.png
+docs/update_doc.py
+
