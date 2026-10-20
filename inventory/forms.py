@@ -26,5 +26,11 @@ class ProductForm(forms.ModelForm):
         fields = ["name", "unit_price"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. Heavy Duty Cargo Pallets"}),
-            "unit_price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "unit_price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0.01"}),
         }
+
+    def clean_unit_price(self):
+        price = self.cleaned_data.get("unit_price")
+        if price is not None and price <= 0:
+            raise forms.ValidationError("Unit price must be greater than zero.")
+        return price

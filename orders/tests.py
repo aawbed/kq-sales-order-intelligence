@@ -115,3 +115,43 @@ class OrdersAndFinancialTests(TestCase):
         self.assertEqual(invoice.amount_paid, Decimal("75400.00"))
         self.assertEqual(invoice.balance, Decimal("0.00"))
         self.assertEqual(invoice.payment_status, Invoice.PaymentStatus.PAID)
+
+    def test_generate_invoice_view_requires_fulfilled_status(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.user)
+        order = Order.objects.create(customer=self.customer, created_by=self.user)
+        order.add_item(self.product_500ml, quantity=10, unit_price=Decimal("650.00"))
+
+        # Pending order cannot be invoiced via view POST
+        url = reverse("orders:generate_invoice", args=[order.order_id])
+        self.client.post(url)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+        self.assertFalse(hasattr(order, "invoice"))
+
+        # Fulfilled order can be invoiced via view POST
+        order.update_status(Order.Status.FULFILLED)
+        self.client.post(url)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.INVOICED)
+        self.assertTrue(hasattr(order, "invoice"))
+
+    def test_operations_manager_can_view_order_detail(self):
+        from django.urls import reverse
+
+        role_ops = Role.objects.create(role_name=Role.RoleName.OPERATIONS_MANAGER)
+        ops_user = User.objects.create_user(username="ops_viewer", password="Password123!", role=role_ops)
+        order = Order.objects.create(customer=self.customer, created_by=self.user)
+
+        self.client.force_login(ops_user)
+        resp = self.client.get(reverse("orders:order_detail", args=[order.order_id]))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_order_item_form_rejects_zero_quantity(self):
+        from orders.forms import OrderItemForm
+
+        form = OrderItemForm(data={"product": self.product_500ml.pk, "quantity": 0})
+        self.assertFalse(form.is_valid())
+        self.assertIn("quantity", form.errors)
+

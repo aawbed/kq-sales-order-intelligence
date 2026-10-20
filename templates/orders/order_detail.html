@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block page_title %}Order Detail{% endblock %}
-{% block sidebar %}{% include "partials/sidebar_sales_agent.html" %}{% endblock %}
+{% block sidebar %}
+    {% if user.role.role_name == 'operations_manager' %}
+        {% include "partials/sidebar_operations_manager.html" %}
+    {% else %}
+        {% include "partials/sidebar_sales_agent.html" %}
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 <a href="{% url 'orders:track_orders' %}" class="text-decoration-none small d-inline-flex align-items-center gap-1 mb-3">
