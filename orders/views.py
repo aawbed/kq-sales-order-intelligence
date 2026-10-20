@@ -25,38 +25,46 @@ def create_order(request):
 
                 item_formset = OrderItemFormSet(request.POST, instance=order)
                 if item_formset.is_valid():
-                    items = item_formset.save(commit=False)
-                    for item in items:
-                        item.unit_price = item.product.unit_price
-                        item.save()
-                    # Delete any items marked for deletion
-                    for obj in item_formset.deleted_objects:
-                        obj.delete()
+                    items = [
+                        item
+                        for item in item_formset.save(commit=False)
+                        if item.product_id and item.quantity and item.quantity >= 1
+                    ]
+                    if not items:
+                        order.delete()
+                        messages.error(request, "Please add at least one valid line item with a quantity of at least 1.")
+                    else:
+                        for item in items:
+                            item.unit_price = item.product.unit_price
+                            item.save()
+                        # Delete any items marked for deletion
+                        for obj in item_formset.deleted_objects:
+                            obj.delete()
 
-                    # Evaluate order for ML anomaly patterns
-                    try:
-                        from core.alerts import check_and_alert_anomaly
+                        # Evaluate order for ML anomaly patterns
+                        try:
+                            from core.alerts import check_and_alert_anomaly
 
-                        check_and_alert_anomaly(order)
-                    except Exception:
-                        pass
+                            check_and_alert_anomaly(order)
+                        except Exception:
+                            pass
 
-                    # Audit trail
-                    from core.audit import log_action
-                    log_action(
-                        request=request,
-                        action="order_created",
-                        target_model="Order",
-                        target_id=f"KQ-{order.order_id}",
-                        details=f"Created order for {order.customer.name} (Priority: {order.get_priority_display()}) with {len(items)} line item(s).",
-                    )
+                        # Audit trail
+                        from core.audit import log_action
+                        log_action(
+                            request=request,
+                            action="order_created",
+                            target_model="Order",
+                            target_id=f"KQ-{order.order_id}",
+                            details=f"Created order for {order.customer.name} (Priority: {order.get_priority_display()}) with {len(items)} line item(s).",
+                        )
 
-                    messages.success(
-                        request,
-                        f"Order KQ-{order.order_id} created successfully "
-                        f"with {len(items)} item(s).",
-                    )
-                    return redirect("orders:order_detail", order_id=order.order_id)
+                        messages.success(
+                            request,
+                            f"Order KQ-{order.order_id} created successfully "
+                            f"with {len(items)} item(s).",
+                        )
+                        return redirect("orders:order_detail", order_id=order.order_id)
                 else:
                     # If items are invalid, delete the partially created order
                     order.delete()
@@ -87,7 +95,7 @@ def track_orders(request):
     return render(request, "orders/track_orders.html", {"orders": orders, "query": query})
 
 
-@sales_agent_required
+@sales_or_operations_required
 def order_detail(request, order_id):
     order = get_object_or_404(
         Order.objects.select_related("customer").prefetch_related("items__product"),
@@ -167,8 +175,15 @@ def generate_invoice(request, order_id):
 
     existing_invoice = getattr(order, "invoice", None)
 
-    # If POST and no invoice exists, generate it
+    # If POST and no invoice exists, generate it only when order is FULFILLED
     if request.method == "POST" and not existing_invoice:
+        if order.status != Order.Status.FULFILLED:
+            messages.error(
+                request,
+                f"Cannot generate invoice while Order KQ-{order.order_id} is '{order.get_status_display()}'. "
+                "The order must first be Confirmed and Fulfilled by the Warehouse.",
+            )
+            return redirect("orders:generate_invoice", order_id=order.order_id)
         invoice = Invoice.generate(order)
         messages.success(request, f"Invoice #{invoice.invoice_id} generated successfully.")
         return redirect("orders:generate_invoice", order_id=order.order_id)

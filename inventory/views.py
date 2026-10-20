@@ -36,25 +36,36 @@ def confirm_fulfilment(request):
 @warehouse_officer_required
 @require_POST
 def confirm_order(request, order_id):
-    """Mark order as fulfilled AND deduct stock for each item."""
-    order = get_object_or_404(
-        Order.objects.prefetch_related("items__product__stock"),
-        pk=order_id,
-    )
-
-    if order.status != Order.Status.CONFIRMED:
-        messages.warning(request, f"Order KQ-{order.order_id} is not in 'Confirmed' status.")
-        return redirect("inventory:confirm_fulfilment")
-
+    """Mark order as fulfilled AND deduct stock for each item with atomic row-level locking."""
     dispatch_notes = request.POST.get("dispatch_notes", "").strip()
 
     with transaction.atomic():
-        for item in order.items.all():
-            try:
-                stock = item.product.stock
-                stock.update_level(-item.quantity, reason=f"Fulfilled Order KQ-{order.order_id}")
-            except Stock.DoesNotExist:
-                pass  # Product has no stock record — skip
+        order = get_object_or_404(
+            Order.objects.select_for_update(),
+            pk=order_id,
+        )
+
+        if order.status != Order.Status.CONFIRMED:
+            messages.warning(request, f"Order KQ-{order.order_id} is not in 'Confirmed' status.")
+            return redirect("inventory:confirm_fulfilment")
+
+        order_items = list(order.items.select_related("product").all())
+        locked_stocks = {}
+        for item in order_items:
+            stock = Stock.objects.select_for_update().filter(product=item.product).first()
+            if stock is None or stock.quantity_on_hand < item.quantity:
+                available = stock.quantity_on_hand if stock is not None else 0
+                messages.error(
+                    request,
+                    f"Cannot fulfil Order KQ-{order.order_id}: insufficient stock for "
+                    f"'{item.product.name}' ({available} on hand, {item.quantity} required).",
+                )
+                return redirect("inventory:confirm_fulfilment")
+            locked_stocks[item.product_id] = stock
+
+        for item in order_items:
+            stock = locked_stocks[item.product_id]
+            stock.update_level(-item.quantity, reason=f"Fulfilled Order KQ-{order.order_id}")
 
         order.status = Order.Status.FULFILLED
         if dispatch_notes:
@@ -71,7 +82,7 @@ def confirm_order(request, order_id):
             action="order_status_changed",
             target_model="Order",
             target_id=f"KQ-{order.order_id}",
-            details=f"Warehouse Officer confirmed fulfilment{note_detail}; status changed to Fulfilled. Stock deducted for {order.items.count()} item(s).",
+            details=f"Warehouse Officer confirmed fulfilment{note_detail}; status changed to Fulfilled. Stock deducted for {len(order_items)} item(s).",
         )
 
     messages.success(request, f"Order KQ-{order.order_id} fulfilled. Stock has been deducted.")

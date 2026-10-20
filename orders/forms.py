@@ -69,6 +69,12 @@ class OrderItemForm(forms.ModelForm):
         self.fields["product"].queryset = Product.objects.all()
         self.fields["product"].empty_label = "Select product..."
 
+    def clean_quantity(self):
+        qty = self.cleaned_data.get("quantity")
+        if qty is not None and qty < 1:
+            raise forms.ValidationError("Quantity must be at least 1.")
+        return qty
+
     def save(self, commit=True):
         item = super().save(commit=False)
         # Auto-fill unit_price from the product's current price
@@ -84,7 +90,9 @@ OrderItemFormSet = inlineformset_factory(
     Order,
     OrderItem,
     form=OrderItemForm,
-    extra=1,
+    extra=0,
+    min_num=1,
+    validate_min=True,
     can_delete=True,
 )
 

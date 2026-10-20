@@ -64,3 +64,36 @@ class InventoryAndStockTests(TestCase):
         self.assertIsNotNone(notification)
         self.assertIn("Low Stock Alert", notification.title)
         self.assertIn("1L Bottle Case", notification.message)
+
+    def test_fulfilment_blocks_when_stock_is_insufficient(self):
+        from django.urls import reverse
+        from orders.models import Customer, Order
+
+        customer = Customer.objects.create(
+            name="Test Catering",
+            contact_info="test@kq.co.ke",
+            account_type="Corporate",
+        )
+        order = Order.objects.create(
+            customer=customer,
+            created_by=self.user_wh,
+            status=Order.Status.CONFIRMED,
+        )
+        # Order 500 units when only 150 are on hand
+        order.add_item(self.product, quantity=500, unit_price=self.product.unit_price)
+
+        self.client.force_login(self.user_wh)
+        self.client.post(reverse("inventory:confirm_order", args=[order.order_id]))
+
+        order.refresh_from_db()
+        self.stock.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CONFIRMED)
+        self.assertEqual(self.stock.quantity_on_hand, 150)
+
+    def test_product_form_rejects_non_positive_unit_price(self):
+        from inventory.forms import ProductForm
+
+        invalid_form = ProductForm(data={"name": "Invalid Water", "unit_price": "0.00"})
+        self.assertFalse(invalid_form.is_valid())
+        self.assertIn("unit_price", invalid_form.errors)
+
