@@ -89,6 +89,7 @@ class AnalyticsAndMLUnitTests(TestCase):
         self.assertEqual(len(records), 14)
         self.assertIn("mae", run.metrics)
         self.assertIn("rmse", run.metrics)
+        self.assertEqual(run.parameters.get("seasonal_order"), [1, 0, 1, 7])
 
         first_rec = records[0]
         self.assertGreater(first_rec.predicted_quantity, 0)
