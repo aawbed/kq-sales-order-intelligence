@@ -37,9 +37,25 @@ def switch_demo_role(request, role_slug):
     """
     Demo/Presentation utility:
     Instantly switch between the 4 authenticated role personas during a live presentation.
+    Restricted to demo/debug environments and sessions initiated by an administrator/superuser.
     """
+    from django.conf import settings
     from django.contrib.auth import login
-    from accounts.models import User
+    from django.core.exceptions import PermissionDenied
+    from accounts.models import Role, User
+
+    demo_enabled = getattr(settings, "DEMO_MODE", settings.DEBUG)
+    is_admin_user = bool(
+        getattr(request.user, "is_superuser", False)
+        or (
+            getattr(request.user, "role", None) is not None
+            and request.user.role.role_name == Role.RoleName.SYSTEM_ADMINISTRATOR
+        )
+    )
+    is_presenter = bool(request.session.get("demo_presenter", False) or is_admin_user)
+
+    if not (demo_enabled and is_presenter):
+        raise PermissionDenied("Role switching is restricted to authorized presentation sessions.")
 
     role_map = {
         "admin": "admin",
@@ -52,6 +68,7 @@ def switch_demo_role(request, role_slug):
         try:
             target_user = User.objects.get(username=target_username)
             login(request, target_user)
+            request.session["demo_presenter"] = True
             messages.info(
                 request,
                 f"Switched role persona to {target_user.role.get_role_name_display()} (@{target_user.username})."
@@ -102,6 +119,18 @@ def notification_list(request):
     return render(request, "core/notifications.html", context)
 
 
+def _safe_redirect_url(request, candidate_url):
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    if candidate_url and url_has_allowed_host_and_scheme(
+        url=candidate_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate_url
+    return None
+
+
 @login_required
 def mark_notification_read(request, notification_id):
     """
@@ -111,14 +140,22 @@ def mark_notification_read(request, notification_id):
     notif.is_read = True
     notif.save(update_fields=["is_read"])
 
-    # If notification has a link, redirect there, else back to list
-    next_url = request.GET.get("next") or notif.link or request.META.get("HTTP_REFERER")
+    # If notification has a safe internal link, redirect there, else back to list
+    next_url = (
+        _safe_redirect_url(request, request.GET.get("next"))
+        or _safe_redirect_url(request, notif.link)
+        or _safe_redirect_url(request, request.META.get("HTTP_REFERER"))
+    )
     if next_url:
         return redirect(next_url)
     return redirect("core:notification_list")
 
 
+from django.views.decorators.http import require_POST
+
+
 @login_required
+@require_POST
 def mark_all_read(request):
     """
     Marks all unread notifications for current user as read.
@@ -126,7 +163,7 @@ def mark_all_read(request):
     count = Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
     if count > 0:
         messages.success(request, f"Marked {count} notification(s) as read.")
-    next_url = request.META.get("HTTP_REFERER") or "core:notification_list"
+    next_url = _safe_redirect_url(request, request.META.get("HTTP_REFERER")) or "core:notification_list"
     return redirect(next_url)
 
 

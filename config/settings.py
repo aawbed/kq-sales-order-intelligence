@@ -30,7 +30,9 @@ SECRET_KEY = os.environ.get(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
+_debug_raw = os.environ.get("DJANGO_DEBUG", os.environ.get("DEBUG", "True"))
+DEBUG = _debug_raw.strip().lower() in ("true", "1", "yes")
+DEMO_MODE = os.environ.get("DJANGO_DEMO_MODE", str(DEBUG)).strip().lower() in ("true", "1", "yes")
 
 ALLOWED_HOSTS = [
     h.strip()
@@ -41,6 +43,14 @@ ALLOWED_HOSTS = [
 ]
 if DEBUG and "testserver" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("testserver")
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "True").strip().lower() in ("true", "1", "yes")
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 
 # Application definition

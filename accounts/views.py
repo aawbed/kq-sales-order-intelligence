@@ -71,14 +71,20 @@ class CustomLoginView(auth_views.LoginView):
         ip = get_client_ip(self.request)
         attempt = LoginAttempt.get_record(username, ip)
         attempt.reset_failures()
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        if getattr(self.request.user, "is_superuser", False) or (
+            getattr(self.request.user, "role", None) is not None
+            and self.request.user.role.role_name == Role.RoleName.SYSTEM_ADMINISTRATOR
+        ):
+            self.request.session["demo_presenter"] = True
+        return response
 
 
 @operations_or_admin_required
 def manage_users(request):
     """Figure 3.7j: Manage User Accounts — list all staff and create new users."""
     if request.method == "POST":
-        form = SystemUserCreationForm(request.POST)
+        form = SystemUserCreationForm(request.POST, current_user=request.user)
         if form.is_valid():
             user = form.save()
 
@@ -98,10 +104,17 @@ def manage_users(request):
             )
             return redirect("accounts:manage_users")
     else:
-        form = SystemUserCreationForm()
+        form = SystemUserCreationForm(current_user=request.user)
 
     users = User.objects.select_related("role").all().order_by("-date_joined")
-    roles = Role.objects.all()
+    is_admin = bool(
+        getattr(request.user, "is_superuser", False)
+        or (
+            getattr(request.user, "role", None) is not None
+            and request.user.role.role_name == Role.RoleName.SYSTEM_ADMINISTRATOR
+        )
+    )
+    roles = Role.objects.all() if is_admin else Role.objects.exclude(role_name=Role.RoleName.SYSTEM_ADMINISTRATOR)
     return render(
         request,
         "accounts/manage_users.html",

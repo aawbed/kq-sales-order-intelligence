@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.db import models, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from core.permissions import sales_agent_required, sales_or_operations_required
 from orders.forms import CustomerForm, OrderForm, OrderItemFormSet, PaymentForm
@@ -96,6 +97,7 @@ def order_detail(request, order_id):
 
 
 @sales_agent_required
+@require_POST
 def confirm_order(request, order_id):
     """Sales Agent confirms a pending order — moves it to 'confirmed' status."""
     order = get_object_or_404(Order, pk=order_id)

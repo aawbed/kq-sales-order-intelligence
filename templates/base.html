@@ -51,7 +51,10 @@
                     <div class="p-2 px-3 bg-light border-bottom d-flex justify-content-between align-items-center">
                         <span class="fw-bold small text-dark"><i class="bi bi-bell-fill me-1 text-danger"></i>Notifications</span>
                         {% if unread_notifications_count > 0 %}
-                        <a href="{% url 'core:mark_all_read' %}" class="badge bg-secondary text-decoration-none">Mark all read</a>
+                        <form method="post" action="{% url 'core:mark_all_read' %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="badge bg-secondary border-0">Mark all read</button>
+                        </form>
                         {% endif %}
                     </div>
                     <div class="list-group list-group-flush" style="max-height: 280px; overflow-y: auto;">
@@ -81,6 +84,7 @@
                 </div>
             </div>
 
+            {% if can_switch_demo_role %}
             <!-- Demo Quick Role Switcher Pill -->
             <div class="dropdown me-2 d-none d-sm-block">
                 <button class="btn btn-sm btn-outline-light dropdown-toggle py-1 px-2" type="button" id="roleSwitcherDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.78rem; border-color: rgba(255,255,255,0.35);">
@@ -94,6 +98,7 @@
                     <li><a class="dropdown-item d-flex align-items-center gap-2 {% if user.username == 'warehouse' %}active{% endif %}" href="{% url 'core:switch_demo_role' 'warehouse' %}"><i class="bi bi-box-seam text-warning"></i> Warehouse Officer</a></li>
                 </ul>
             </div>
+            {% endif %}
 
             <div class="kq-user-info d-none d-sm-block">
                 <a href="{% url 'accounts:profile' %}" class="text-white text-decoration-none" title="View Profile & Settings">
