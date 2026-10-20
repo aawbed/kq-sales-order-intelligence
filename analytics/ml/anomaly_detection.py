@@ -41,7 +41,7 @@ def detect_anomalies(order_queryset, contamination=None, return_details=False):
                 continue
             quantity = sum(item.quantity for item in items)
             total_value = sum(item.quantity * item.unit_price for item in items)
-            freq = order.customer.orders.count()
+            freq = order.customer.orders.filter(order_date__lte=order.order_date).count()
 
             data.append({
                 "order_id": order.order_id,
@@ -72,7 +72,7 @@ def detect_anomalies(order_queryset, contamination=None, return_details=False):
             elif row["quantity"] < mean_qty * 0.1 and row["freq"] > 5:
                 reasons.append(f"Unusually tiny order ({row['quantity']} units)")
             if row["total_value"] > mean_val * 2.5:
-                reasons.append(f"High transaction value (KES {row['total_value']:,.2f})")
+                reasons.append(f"High transaction value (KSh {row['total_value']:,.2f})")
             if row["freq"] <= 1 and row["total_value"] > mean_val:
                 reasons.append("First-time customer large order")
             if not reasons:

@@ -80,8 +80,10 @@ def segment_customers(customer_queryset, n_clusters=None, return_details=False):
             except Exception:
                 sil_score = 0.0
 
-        cluster_means = df.groupby("cluster")[["recency", "frequency", "monetary"]].mean()
-        sorted_clusters = cluster_means.sort_values("monetary", ascending=False).index.tolist()
+        # Rank clusters by composite standardized RFM score (-recency_z + frequency_z + monetary_z)
+        df["rfm_composite"] = -scaled_features[:, 0] + scaled_features[:, 1] + scaled_features[:, 2]
+        cluster_scores = df.groupby("cluster")["rfm_composite"].mean()
+        sorted_clusters = cluster_scores.sort_values(ascending=False).index.tolist()
 
         labels_palette = {
             2: ["High-Value / Frequent", "Low-Frequency / Developing"],
@@ -97,6 +99,7 @@ def segment_customers(customer_queryset, n_clusters=None, return_details=False):
             cluster_to_label[cluster] = labels[i] if i < len(labels) else f"Tier {i+1}"
 
         df["cluster_label"] = df["cluster"].map(cluster_to_label)
+        df.drop(columns=["rfm_composite"], inplace=True)
         records = df.to_dict("records")
 
         metrics = {

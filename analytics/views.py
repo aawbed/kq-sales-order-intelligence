@@ -62,16 +62,21 @@ def dashboard(request):
     forecast_horizon = system_cfg.forecast_horizon_days
     forecast_confidence = system_cfg.forecast_confidence
 
-    # 1. SARIMAX Demand Forecast
+    # 1. SARIMAX Demand Forecast (respecting forecast_cache_timeout)
     forecast_run = MLModelRun.objects.filter(
         model_type=MLModelRun.ModelType.FORECASTING, status="completed"
     ).first()
-    if not forecast_run:
+    cache_expired = (
+        forecast_run is not None
+        and system_cfg.forecast_cache_timeout > 0
+        and (now - forecast_run.trained_at).total_seconds() > system_cfg.forecast_cache_timeout
+    )
+    if not forecast_run or cache_expired:
         try:
             from analytics.ml.pipeline import train_and_persist_forecasting
             forecast_run, _ = train_and_persist_forecasting(user=request.user)
         except Exception:
-            forecast_run = None
+            pass
 
     forecast_records = (
         list(forecast_run.forecast_records.all()[:forecast_horizon])
