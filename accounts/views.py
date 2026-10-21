@@ -80,7 +80,7 @@ class CustomLoginView(auth_views.LoginView):
         return response
 
 
-@operations_or_admin_required
+@system_administrator_required
 def manage_users(request):
     """Figure 3.7j: Manage User Accounts — list all staff and create new users."""
     if request.method == "POST":
