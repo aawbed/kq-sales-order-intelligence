@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static humanize %}
 {% block page_title %}Sales & ML Intelligence Dashboard{% endblock %}
 {% block sidebar %}{% include "partials/sidebar_operations_manager.html" %}{% endblock %}
 
@@ -16,7 +16,7 @@
             <div class="d-flex align-items-start justify-content-between">
                 <div>
                     <div class="kq-stat-label">Revenue (Last 30 Days)</div>
-                    <div class="kq-stat-value">KSh {{ recent_revenue|floatformat:0 }}</div>
+                    <div class="kq-stat-value">KSh {{ recent_revenue|floatformat:0|intcomma }}</div>
                     <div class="kq-stat-sub">Total order value</div>
                 </div>
                 <div class="rounded-3 d-flex align-items-center justify-content-center"
@@ -31,7 +31,7 @@
             <div class="d-flex align-items-start justify-content-between">
                 <div>
                     <div class="kq-stat-label">Orders This Week</div>
-                    <div class="kq-stat-value">{{ weekly_orders }}</div>
+                    <div class="kq-stat-value">{{ weekly_orders|intcomma }}</div>
                     <div class="kq-stat-sub">Active bookings</div>
                 </div>
                 <div class="rounded-3 d-flex align-items-center justify-content-center"
@@ -170,7 +170,7 @@
                                                         <div class="col-6"><strong>Order:</strong> KQ-{{ a.order.order_id }}</div>
                                                         <div class="col-6"><strong>Customer:</strong> {{ a.customer_name }}</div>
                                                         <div class="col-6"><strong>Date:</strong> {{ a.order.order_date|date:"Y-m-d" }}</div>
-                                                        <div class="col-6"><strong>Total:</strong> KSh {{ a.order.total_amount|floatformat:2 }}</div>
+                                                        <div class="col-6"><strong>Total:</strong> KSh {{ a.order.total_amount|floatformat:2|intcomma }}</div>
                                                         <div class="col-12 mt-2"><strong>Detector Finding:</strong> {{ a.explanation|default:"Statistical outlier score" }}</div>
                                                     </div>
                                                 </div>
@@ -280,8 +280,8 @@
                     <tr>
                         <td class="fw-semibold">{{ s.customer_name }}</td>
                         <td>{{ s.recency }}</td>
-                        <td>{{ s.frequency }}</td>
-                        <td>KSh {{ s.monetary|floatformat:2 }}</td>
+                        <td>{{ s.frequency|intcomma }}</td>
+                        <td>KSh {{ s.monetary|floatformat:2|intcomma }}</td>
                         <td>
                             <span class="badge {% if 'VIP' in s.cluster_label or 'High' in s.cluster_label %}bg-success{% elif 'Risk' in s.cluster_label or 'Dormant' in s.cluster_label %}bg-warning text-dark{% else %}bg-info{% endif %}">
                                 {{ s.cluster_label }}

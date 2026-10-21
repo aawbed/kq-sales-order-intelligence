@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block page_title %}Order Detail{% endblock %}
 {% block sidebar %}
     {% if user.role.role_name == 'operations_manager' %}
@@ -60,9 +61,9 @@
                             {% for item in order.items.all %}
                             <tr>
                                 <td class="fw-semibold">{{ item.product.name }}</td>
-                                <td>{{ item.quantity }}</td>
-                                <td>KSh {{ item.unit_price }}</td>
-                                <td class="fw-semibold">KSh {{ item.line_total }}</td>
+                                <td>{{ item.quantity|intcomma }}</td>
+                                <td>KSh {{ item.unit_price|floatformat:2|intcomma }}</td>
+                                <td class="fw-semibold">KSh {{ item.line_total|floatformat:2|intcomma }}</td>
                             </tr>
                             {% empty %}
                             <tr>
@@ -70,6 +71,14 @@
                             </tr>
                             {% endfor %}
                         </tbody>
+                        {% if order.items.all %}
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="3" class="text-end">Order Subtotal (Excl. VAT):</th>
+                                <th class="fw-bold">KSh {{ order.total_amount|floatformat:2|intcomma }}</th>
+                            </tr>
+                        </tfoot>
+                        {% endif %}
                     </table>
                 </div>
             </div>

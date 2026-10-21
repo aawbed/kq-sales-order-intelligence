@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block page_title %}Warehouse Fulfilment Queue{% endblock %}
 {% block sidebar %}{% include "partials/sidebar_warehouse_officer.html" %}{% endblock %}
 
@@ -38,7 +39,7 @@
                         <td>{{ order.customer.name }}</td>
                         <td>
                             {% for item in order.items.all %}
-                            <span class="small">{{ item.quantity }}x {{ item.product.name }}{% if not forloop.last %},{% endif %}</span>
+                            <span class="small">{{ item.quantity|intcomma }}x {{ item.product.name }}{% if not forloop.last %},{% endif %}</span>
                             {% empty %}
                             <span class="text-muted small">No items</span>
                             {% endfor %}
@@ -73,7 +74,7 @@
                                                         {% for item in order.items.all %}
                                                         <li class="list-group-item d-flex justify-content-between align-items-center py-2">
                                                             <span>{{ item.product.name }}</span>
-                                                            <span class="badge bg-secondary rounded-pill">{{ item.quantity }} cases</span>
+                                                            <span class="badge bg-secondary rounded-pill">{{ item.quantity|intcomma }} cases</span>
                                                         </li>
                                                         {% endfor %}
                                                     </ul>

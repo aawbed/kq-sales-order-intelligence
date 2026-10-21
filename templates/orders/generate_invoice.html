@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block page_title %}Invoice & Payment Statement{% endblock %}
 {% block sidebar %}
     {% if user.role.role_name == 'operations_manager' %}
@@ -119,9 +120,9 @@
                             <tr>
                                 <td class="text-muted small">{{ forloop.counter }}</td>
                                 <td class="fw-semibold">{{ item.product.name }}</td>
-                                <td class="text-center">{{ item.quantity }}</td>
-                                <td class="text-end">KSh {{ item.unit_price|floatformat:2 }}</td>
-                                <td class="text-end fw-semibold">KSh {{ item.line_total|floatformat:2 }}</td>
+                                <td class="text-center">{{ item.quantity|intcomma }}</td>
+                                <td class="text-end">KSh {{ item.unit_price|floatformat:2|intcomma }}</td>
+                                <td class="text-end fw-semibold">KSh {{ item.line_total|floatformat:2|intcomma }}</td>
                             </tr>
                             {% empty %}
                             <tr>
@@ -146,19 +147,19 @@
                         </div>
                     </div>
                     <div class="col-sm-6 text-sm-end">
-                        <div class="text-muted small mb-1">Subtotal (Excl. Tax): <span class="fw-semibold text-dark">KSh {{ subtotal|floatformat:2 }}</span></div>
-                        <div class="text-muted small mb-2">VAT (16%): <span class="fw-semibold text-dark">KSh {{ vat|floatformat:2 }}</span></div>
+                        <div class="text-muted small mb-1">Subtotal (Excl. Tax): <span class="fw-semibold text-dark">KSh {{ subtotal|floatformat:2|intcomma }}</span></div>
+                        <div class="text-muted small mb-2">VAT (16%): <span class="fw-semibold text-dark">KSh {{ vat|floatformat:2|intcomma }}</span></div>
                         <div class="fs-5 pb-2 mb-2" style="border-bottom: 1px dashed var(--kq-border);">
-                            Total Invoiced: <span class="fw-bold" style="color: var(--kq-primary);">KSh {{ total|floatformat:2 }}</span>
+                            Total Invoiced: <span class="fw-bold" style="color: var(--kq-primary);">KSh {{ total|floatformat:2|intcomma }}</span>
                         </div>
                         {% if existing_invoice %}
                         <div class="text-muted small mb-1">
-                            Amount Paid: <span class="fw-bold text-success">KSh {{ existing_invoice.amount_paid|floatformat:2 }}</span>
+                            Amount Paid: <span class="fw-bold text-success">KSh {{ existing_invoice.amount_paid|floatformat:2|intcomma }}</span>
                         </div>
                         <div class="fs-6 mt-1">
                             Balance Due:
                             <span class="fw-bold {% if existing_invoice.balance > 0 %}text-danger{% else %}text-success{% endif %}">
-                                KSh {{ existing_invoice.balance|floatformat:2 }}
+                                KSh {{ existing_invoice.balance|floatformat:2|intcomma }}
                             </span>
                         </div>
                         {% endif %}
@@ -209,7 +210,7 @@
                                     {{ payment.recorded_by.username|default:"System" }}
                                 </td>
                                 <td class="text-end fw-bold text-success">
-                                    KSh {{ payment.amount|floatformat:2 }}
+                                    KSh {{ payment.amount|floatformat:2|intcomma }}
                                 </td>
                             </tr>
                             {% empty %}
@@ -225,7 +226,7 @@
                         <tfoot class="table-light">
                             <tr>
                                 <th colspan="5" class="text-end">Total Amount Paid:</th>
-                                <th class="text-end text-success fw-bold">KSh {{ existing_invoice.amount_paid|floatformat:2 }}</th>
+                                <th class="text-end text-success fw-bold">KSh {{ existing_invoice.amount_paid|floatformat:2|intcomma }}</th>
                             </tr>
                         </tfoot>
                         {% endif %}
@@ -253,7 +254,7 @@
 
                     <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 px-3 mb-3">
                         <span class="text-muted small">Outstanding Balance:</span>
-                        <span class="fw-bold text-danger fs-6">KSh {{ existing_invoice.balance|floatformat:2 }}</span>
+                        <span class="fw-bold text-danger fs-6">KSh {{ existing_invoice.balance|floatformat:2|intcomma }}</span>
                     </div>
 
                     {% if payment_form.errors %}
@@ -274,7 +275,7 @@
                         <div class="mb-3">
                             <label class="form-label small fw-semibold">Payment Amount (KSh) <span class="text-danger">*</span></label>
                             {{ payment_form.amount }}
-                            <div class="form-text small">Max payable: KSh {{ existing_invoice.balance|floatformat:2 }}</div>
+                            <div class="form-text small">Max payable: KSh {{ existing_invoice.balance|floatformat:2|intcomma }}</div>
                         </div>
 
                         <div class="mb-3">
@@ -312,7 +313,7 @@
                     </div>
                     <h6 class="fw-bold text-success mb-1">Invoice Fully Settled</h6>
                     <p class="text-muted small mb-0">
-                        All charges for this order have been paid in full (KSh {{ existing_invoice.amount_paid|floatformat:2 }}). No outstanding balance remaining.
+                        All charges for this order have been paid in full (KSh {{ existing_invoice.amount_paid|floatformat:2|intcomma }}). No outstanding balance remaining.
                     </p>
                 </div>
             </div>
@@ -345,7 +346,7 @@
                     </p>
                     <form method="post">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn-dark w-100">
+                        <button type="submit" class="btn btn-dark w-100" {% if order.status != 'fulfilled' %}disabled title="Order must be fulfilled by Warehouse before invoicing"{% endif %}>
                             <i class="bi bi-receipt me-1"></i> Generate Invoice
                         </button>
                     </form>

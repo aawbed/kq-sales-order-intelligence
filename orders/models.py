@@ -73,6 +73,10 @@ class Order(models.Model):
         self.status = new_status
         self.save(update_fields=["status"])
 
+    @property
+    def total_amount(self):
+        return sum((item.line_total for item in self.items.all()), Decimal("0.00"))
+
 
 class OrderItem(models.Model):
     """Corresponds to the ORDER_ITEM entity in the ERD / class diagram."""

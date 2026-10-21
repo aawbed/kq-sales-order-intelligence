@@ -69,7 +69,7 @@ def dashboard(request):
     cache_expired = (
         forecast_run is not None
         and system_cfg.forecast_cache_timeout > 0
-        and (now - forecast_run.trained_at).total_seconds() > system_cfg.forecast_cache_timeout
+        and (now - forecast_run.run_date).total_seconds() > system_cfg.forecast_cache_timeout * 60
     )
     if not forecast_run or cache_expired:
         try:
@@ -201,9 +201,9 @@ def generate_reports(request):
                 o.customer.name,
                 o.customer.account_type,
                 o_units,
-                f"{o_sub:,.2f}",
-                f"{o_vat:,.2f}",
-                f"{o_tot:,.2f}",
+                f"KSh {o_sub:,.2f}",
+                f"KSh {o_vat:,.2f}",
+                f"KSh {o_tot:,.2f}",
                 o.get_status_display()
             ])
         summary_text = f"Total Orders: {len(rows)} | Total Water Units Demanded: {total_units:,} | Cumulative Billed Revenue: KSh {total_rev:,.2f}"
@@ -256,7 +256,7 @@ def generate_reports(request):
                 item.get("customer_name", "N/A"),
                 item.get("account_type", "N/A"),
                 f"{qty:,}",
-                f"{val:,.2f}",
+                f"KSh {val:,.2f}",
                 f"{score:.4f}",
                 "FLAGGED ANOMALY" if is_anom else "Normal"
             ])
@@ -308,9 +308,9 @@ def generate_reports(request):
                 inv.order.customer.name,
                 inv.order.customer.account_type,
                 f"{age}d",
-                f"{t:,.2f}",
-                f"{p:,.2f}",
-                f"{b:,.2f}",
+                f"KSh {t:,.2f}",
+                f"KSh {p:,.2f}",
+                f"KSh {b:,.2f}",
                 inv.get_payment_status_display()
             ])
         summary_text = f"Total Invoiced: KSh {tot_inv:,.2f} | Total Collected: KSh {tot_paid:,.2f} | Outstanding Receivables: KSh {tot_bal:,.2f}"

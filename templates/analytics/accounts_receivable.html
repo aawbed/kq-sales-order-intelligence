@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block page_title %}Accounts Receivable{% endblock %}
 {% block sidebar %}{% include "partials/sidebar_operations_manager.html" %}{% endblock %}
 
@@ -22,7 +23,7 @@
     <div class="col-sm-6 col-xl-3">
         <div class="kq-stat-card shadow-sm">
             <div class="kq-stat-label">Total Invoiced (Gross)</div>
-            <div class="kq-stat-value text-dark">KSh {{ total_invoiced|floatformat:2 }}</div>
+            <div class="kq-stat-value text-dark">KSh {{ total_invoiced|floatformat:2|intcomma }}</div>
             <div class="small text-muted mt-1">
                 <i class="bi bi-receipt me-1"></i>Cumulative billing volume
             </div>
@@ -31,7 +32,7 @@
     <div class="col-sm-6 col-xl-3">
         <div class="kq-stat-card shadow-sm">
             <div class="kq-stat-label">Total Collected</div>
-            <div class="kq-stat-value text-success">KSh {{ total_collected|floatformat:2 }}</div>
+            <div class="kq-stat-value text-success">KSh {{ total_collected|floatformat:2|intcomma }}</div>
             <div class="small text-muted mt-1">
                 <i class="bi bi-cash-stack me-1 text-success"></i>Settled via M-Pesa / Bank / Journal
             </div>
@@ -41,7 +42,7 @@
         <div class="kq-stat-card shadow-sm">
             <div class="kq-stat-label">Total Outstanding</div>
             <div class="kq-stat-value {% if total_outstanding > 0 %}text-danger{% else %}text-success{% endif %}">
-                KSh {{ total_outstanding|floatformat:2 }}
+                KSh {{ total_outstanding|floatformat:2|intcomma }}
             </div>
             <div class="small text-muted mt-1">
                 <i class="bi bi-exclamation-triangle me-1 text-danger"></i>Unpaid receivables balance
@@ -76,7 +77,7 @@
                         <span class="badge bg-success">Current (0–30 Days)</span>
                         <span class="small text-muted fw-bold">{{ buckets.current.count }} invoice(s)</span>
                     </div>
-                    <div class="fs-5 fw-bold text-dark mt-2">KSh {{ buckets.current.amount|floatformat:2 }}</div>
+                    <div class="fs-5 fw-bold text-dark mt-2">KSh {{ buckets.current.amount|floatformat:2|intcomma }}</div>
                     <div class="small text-muted">{{ buckets.current.percent }}% of outstanding</div>
                 </div>
             </div>
@@ -86,7 +87,7 @@
                         <span class="badge bg-info text-dark">31–60 Days</span>
                         <span class="small text-muted fw-bold">{{ buckets.month1.count }} invoice(s)</span>
                     </div>
-                    <div class="fs-5 fw-bold text-dark mt-2">KSh {{ buckets.month1.amount|floatformat:2 }}</div>
+                    <div class="fs-5 fw-bold text-dark mt-2">KSh {{ buckets.month1.amount|floatformat:2|intcomma }}</div>
                     <div class="small text-muted">{{ buckets.month1.percent }}% of outstanding</div>
                 </div>
             </div>
@@ -96,7 +97,7 @@
                         <span class="badge bg-warning text-dark">61–90 Days</span>
                         <span class="small text-muted fw-bold">{{ buckets.month2.count }} invoice(s)</span>
                     </div>
-                    <div class="fs-5 fw-bold text-dark mt-2">KSh {{ buckets.month2.amount|floatformat:2 }}</div>
+                    <div class="fs-5 fw-bold text-dark mt-2">KSh {{ buckets.month2.amount|floatformat:2|intcomma }}</div>
                     <div class="small text-muted">{{ buckets.month2.percent }}% of outstanding</div>
                 </div>
             </div>
@@ -106,7 +107,7 @@
                         <span class="badge bg-danger">90+ Days (Overdue)</span>
                         <span class="small text-muted fw-bold">{{ buckets.overdue.count }} invoice(s)</span>
                     </div>
-                    <div class="fs-5 fw-bold text-danger mt-2">KSh {{ buckets.overdue.amount|floatformat:2 }}</div>
+                    <div class="fs-5 fw-bold text-danger mt-2">KSh {{ buckets.overdue.amount|floatformat:2|intcomma }}</div>
                     <div class="small text-muted">{{ buckets.overdue.percent }}% of outstanding</div>
                 </div>
             </div>
@@ -202,10 +203,10 @@
                                 {{ row.age_days }}d
                             </span>
                         </td>
-                        <td class="text-end">KSh {{ row.total_amount|floatformat:2 }}</td>
-                        <td class="text-end text-success">KSh {{ row.amount_paid|floatformat:2 }}</td>
+                        <td class="text-end">KSh {{ row.total_amount|floatformat:2|intcomma }}</td>
+                        <td class="text-end text-success">KSh {{ row.amount_paid|floatformat:2|intcomma }}</td>
                         <td class="text-end fw-bold {% if row.balance > 0 %}text-danger{% else %}text-success{% endif %}">
-                            KSh {{ row.balance|floatformat:2 }}
+                            KSh {{ row.balance|floatformat:2|intcomma }}
                         </td>
                         <td class="text-center">
                             {% if row.status == 'paid' %}
