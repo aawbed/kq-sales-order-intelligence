@@ -73,7 +73,7 @@ python manage.py collectstatic --noinput
 
 # 7. Seed demo database and train ML intelligence models
 echo "[7/7] Seeding demo orders & training initial ML models..."
-python manage.py seed_demo_data
+python manage.py seed_demo_data --force
 python manage.py retrain_models
 
 echo ""
