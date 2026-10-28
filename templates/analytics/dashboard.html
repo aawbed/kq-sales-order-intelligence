@@ -303,10 +303,16 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ forecast_labels_list|json_script:"forecast-labels-data" }}
+{{ forecast_values_list|json_script:"forecast-values-data" }}
+{{ forecast_lower_list|json_script:"forecast-lower-data" }}
+{{ forecast_upper_list|json_script:"forecast-upper-data" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
-    const labels = {{ forecast_labels|safe }};
-    const values = {{ forecast_values|safe }};
+    const labels = JSON.parse(document.getElementById('forecast-labels-data').textContent || '[]');
+    const values = JSON.parse(document.getElementById('forecast-values-data').textContent || '[]');
+    const lowerBounds = JSON.parse(document.getElementById('forecast-lower-data').textContent || '[]');
+    const upperBounds = JSON.parse(document.getElementById('forecast-upper-data').textContent || '[]');
 
     if (labels.length > 0) {
         const ctx = document.getElementById('forecastChart').getContext('2d');
@@ -314,17 +320,40 @@
             type: 'line',
             data: {
                 labels: labels,
-                datasets: [{
-                    label: 'Predicted Demand (units)',
-                    data: values,
-                    borderColor: '#c8102e',
-                    backgroundColor: 'rgba(200, 16, 46, 0.08)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    borderWidth: 2,
-                }]
+                datasets: [
+                    {
+                        label: 'Upper Confidence Bound',
+                        data: upperBounds,
+                        borderColor: 'rgba(200, 16, 46, 0.18)',
+                        borderDash: [4, 4],
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.3,
+                    },
+                    {
+                        label: 'Predicted Demand (units)',
+                        data: values,
+                        borderColor: '#c8102e',
+                        backgroundColor: 'rgba(200, 16, 46, 0.10)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointHoverRadius: 6,
+                        borderWidth: 2,
+                    },
+                    {
+                        label: 'Confidence Interval',
+                        data: lowerBounds,
+                        borderColor: 'rgba(200, 16, 46, 0.18)',
+                        backgroundColor: 'rgba(200, 16, 46, 0.08)',
+                        borderDash: [4, 4],
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        fill: 0,
+                        tension: 0.3,
+                    }
+                ]
             },
             options: {
                 responsive: true,

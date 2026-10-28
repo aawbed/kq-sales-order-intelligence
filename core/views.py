@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from core.models import Notification
 from core.permissions import system_administrator_required
@@ -79,10 +80,18 @@ def switch_demo_role(request, role_slug):
 
 
 def custom_permission_denied(request, exception=None):
-    """
-    Friendly 403 page with a button to go back to the correct home page.
-    """
+    """Friendly 403 page with a button to go back to the correct home page."""
     return render(request, "core/403.html", status=403)
+
+
+def custom_page_not_found(request, exception=None):
+    """Friendly 404 page matching the KQ design system."""
+    return render(request, "core/404.html", status=404)
+
+
+def custom_server_error(request):
+    """Self-contained 500 error page that does not depend on DB context processors."""
+    return render(request, "core/500.html", status=500)
 
 
 @login_required
@@ -119,6 +128,16 @@ def notification_list(request):
     return render(request, "core/notifications.html", context)
 
 
+def _sanitize_csv_cell(value):
+    """Neutralize spreadsheet formula injection characters in exported CSV cells."""
+    text = "" if value is None else str(value)
+    if text and text[0] in ("=", "+", "@", "\t", "\r"):
+        return f"'{text}"
+    if text.startswith("-") and not text.lstrip("-").replace(".", "", 1).replace(",", "").isdigit():
+        return f"'{text}"
+    return text
+
+
 def _safe_redirect_url(request, candidate_url):
     from django.utils.http import url_has_allowed_host_and_scheme
 
@@ -149,9 +168,6 @@ def mark_notification_read(request, notification_id):
     if next_url:
         return redirect(next_url)
     return redirect("core:notification_list")
-
-
-from django.views.decorators.http import require_POST
 
 
 @login_required
@@ -221,13 +237,13 @@ def audit_logs(request):
         for l in logs[:1000]:
             actor = l.user.username if l.user else "Anonymous"
             writer.writerow([
-                l.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                actor,
-                l.get_action_display(),
-                l.target_model,
-                l.target_id,
-                l.ip_address or "N/A",
-                l.details,
+                _sanitize_csv_cell(l.timestamp.strftime("%Y-%m-%d %H:%M:%S")),
+                _sanitize_csv_cell(actor),
+                _sanitize_csv_cell(l.get_action_display()),
+                _sanitize_csv_cell(l.target_model),
+                _sanitize_csv_cell(l.target_id),
+                _sanitize_csv_cell(l.ip_address or "N/A"),
+                _sanitize_csv_cell(l.details),
             ])
         return response
 

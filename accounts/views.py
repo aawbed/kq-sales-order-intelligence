@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from accounts.forms import SystemUserCreationForm
 from accounts.models import Role, User
@@ -123,44 +124,21 @@ def manage_users(request):
 
 
 @system_administrator_required
+@require_POST
 def edit_user_role(request, user_id):
     """Update a user's role from the Manage Users screen."""
     target_user = get_object_or_404(User, pk=user_id)
 
-    if request.method == "POST":
-        role_id = request.POST.get("role")
-        if role_id:
-            role = get_object_or_404(Role, pk=role_id)
-            old_role = str(target_user.role)
-            target_user.role = role
-            target_user.save(update_fields=["role"])
+    role_id = request.POST.get("role")
+    if role_id:
+        role = get_object_or_404(Role, pk=role_id)
+        if target_user.pk == request.user.pk and role.role_name != Role.RoleName.SYSTEM_ADMINISTRATOR:
+            messages.error(request, "You cannot remove your own System Administrator role.")
+            return redirect("accounts:manage_users")
 
-            from core.audit import log_action
-
-            log_action(
-                request=request,
-                action="user_modified",
-                target_model="User",
-                target_id=target_user.username,
-                details=f"Modified role for user '{target_user.username}' from '{old_role}' to '{role}'.",
-            )
-
-            messages.success(
-                request,
-                f"'{target_user.username}' is now assigned the '{role}' role.",
-            )
-    return redirect("accounts:manage_users")
-
-
-@system_administrator_required
-def toggle_user_active(request, user_id):
-    """Enable or disable a user account."""
-    target_user = get_object_or_404(User, pk=user_id)
-
-    if request.method == "POST":
-        target_user.is_active = not target_user.is_active
-        target_user.save(update_fields=["is_active"])
-        status = "activated" if target_user.is_active else "deactivated"
+        old_role = str(target_user.role)
+        target_user.role = role
+        target_user.save(update_fields=["role"])
 
         from core.audit import log_action
 
@@ -169,11 +147,41 @@ def toggle_user_active(request, user_id):
             action="user_modified",
             target_model="User",
             target_id=target_user.username,
-            details=f"Account status for '{target_user.username}' set to {status}.",
+            details=f"Modified role for user '{target_user.username}' from '{old_role}' to '{role}'.",
         )
 
-        messages.success(request, f"'{target_user.username}' has been {status}.")
+        messages.success(
+            request,
+            f"'{target_user.username}' is now assigned the '{role}' role.",
+        )
+    return redirect("accounts:manage_users")
 
+
+@system_administrator_required
+@require_POST
+def toggle_user_active(request, user_id):
+    """Enable or disable a user account."""
+    target_user = get_object_or_404(User, pk=user_id)
+
+    if target_user.pk == request.user.pk:
+        messages.error(request, "You cannot deactivate your own active administrator session.")
+        return redirect("accounts:manage_users")
+
+    target_user.is_active = not target_user.is_active
+    target_user.save(update_fields=["is_active"])
+    status = "activated" if target_user.is_active else "deactivated"
+
+    from core.audit import log_action
+
+    log_action(
+        request=request,
+        action="user_modified",
+        target_model="User",
+        target_id=target_user.username,
+        details=f"Account status for '{target_user.username}' set to {status}.",
+    )
+
+    messages.success(request, f"'{target_user.username}' has been {status}.")
     return redirect("accounts:manage_users")
 
 

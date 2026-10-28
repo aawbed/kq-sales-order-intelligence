@@ -94,6 +94,8 @@ class AuditLog(models.Model):
         PAYMENT_RECORDED = "payment_recorded", "Payment Recorded"
         SETTINGS_UPDATED = "settings_updated", "System Settings Updated"
         USER_MODIFIED = "user_modified", "User Account Modified"
+        RETRAIN_ML_MODELS = "retrain_ml_models", "ML Models Retrained"
+        REVIEW_ORDER_ANOMALY = "review_order_anomaly", "Order Anomaly Reviewed"
 
     log_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(

@@ -1,18 +1,15 @@
-from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.test import RequestFactory, TestCase
-from django.utils import timezone
+from django.urls import reverse
 
 from accounts.models import Role
 from core.models import LoginAttempt
 from core.permissions import (
     operations_manager_required,
     operations_or_admin_required,
-    role_required,
     sales_agent_required,
     system_administrator_required,
-    warehouse_officer_required,
 )
 
 User = get_user_model()
@@ -58,19 +55,16 @@ class AccountsAndSecurityTests(TestCase):
     def test_brute_force_lockout_logic(self):
         record = LoginAttempt.get_record(username="target_user", ip_address="127.0.0.1")
 
-        # 1-4 failures should not lock
         for i in range(1, 5):
             count = record.record_failure()
             self.assertEqual(count, i)
             self.assertFalse(record.is_locked())
 
-        # 5th failure should trigger lockout
         count = record.record_failure()
         self.assertEqual(count, 5)
         self.assertTrue(record.is_locked())
         self.assertGreater(record.remaining_lockout_seconds(), 0)
 
-        # Successful login resets the attempt counter
         record.reset_failures()
         self.assertEqual(record.failed_count, 0)
         self.assertFalse(record.is_locked())
@@ -94,7 +88,6 @@ class AccountsAndSecurityTests(TestCase):
 
         req = self.factory.get("/")
 
-        # Sales user access
         req.user = self.user_sales
         self.assertEqual(sales_view(req), "sales_ok")
         with self.assertRaises(PermissionDenied):
@@ -104,14 +97,12 @@ class AccountsAndSecurityTests(TestCase):
         with self.assertRaises(PermissionDenied):
             shared_view(req)
 
-        # Operations Manager access
         req.user = self.user_op
         self.assertEqual(ops_view(req), "ops_ok")
         self.assertEqual(shared_view(req), "shared_ok")
         with self.assertRaises(PermissionDenied):
             sales_view(req)
 
-        # System Administrator access
         req.user = self.user_admin
         self.assertEqual(admin_view(req), "admin_ok")
         self.assertEqual(shared_view(req), "shared_ok")
@@ -121,13 +112,26 @@ class AccountsAndSecurityTests(TestCase):
     def test_non_admin_cannot_create_system_administrator_account(self):
         from accounts.forms import SystemUserCreationForm
 
-        # Operations Manager form should exclude System Administrator role
         ops_form = SystemUserCreationForm(current_user=self.user_op)
         ops_role_names = list(ops_form.fields["role"].queryset.values_list("role_name", flat=True))
         self.assertNotIn(Role.RoleName.SYSTEM_ADMINISTRATOR, ops_role_names)
 
-        # System Administrator form should include System Administrator role
         admin_form = SystemUserCreationForm(current_user=self.user_admin)
         admin_role_names = list(admin_form.fields["role"].queryset.values_list("role_name", flat=True))
         self.assertIn(Role.RoleName.SYSTEM_ADMINISTRATOR, admin_role_names)
 
+    def test_admin_cannot_deactivate_or_demote_own_account(self):
+        self.client.force_login(self.user_admin)
+
+        resp_toggle = self.client.post(reverse("accounts:toggle_user_active", args=[self.user_admin.pk]))
+        self.assertEqual(resp_toggle.status_code, 302)
+        self.user_admin.refresh_from_db()
+        self.assertTrue(self.user_admin.is_active)
+
+        resp_role = self.client.post(
+            reverse("accounts:edit_user_role", args=[self.user_admin.pk]),
+            {"role": self.role_sales.pk},
+        )
+        self.assertEqual(resp_role.status_code, 302)
+        self.user_admin.refresh_from_db()
+        self.assertEqual(self.user_admin.role, self.role_admin)

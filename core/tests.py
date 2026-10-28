@@ -1,9 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from accounts.models import Role
 from core.audit import log_action
 from core.models import AuditLog, Notification
+from core.views import _sanitize_csv_cell
 
 User = get_user_model()
 
@@ -53,25 +55,40 @@ class CoreAuditAndNotificationTests(TestCase):
         self.assertIsNotNone(note)
         self.assertFalse(note.is_read)
 
-        # Mark as read
         note.mark_as_read()
         self.assertTrue(note.is_read)
 
-    def test_demo_role_switcher_blocks_unauthorized_escalation(self):
-        from django.urls import reverse
+    def test_notification_escapes_html_against_stored_xss(self):
+        Notification.objects.create(
+            recipient=self.user,
+            title="Anomaly Alert",
+            message="Order for <script>alert('xss')</script> flagged.",
+            category=Notification.Category.ANOMALY,
+            level=Notification.Level.DANGER,
+        )
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("core:notification_list"))
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode("utf-8")
+        self.assertNotIn("<script>alert('xss')</script>", body)
+        self.assertIn("&lt;script&gt;", body)
 
+    def test_csv_cell_sanitizer_neutralizes_formula_injection(self):
+        self.assertEqual(_sanitize_csv_cell("=CMD|' /C calc'!A0"), "'=CMD|' /C calc'!A0")
+        self.assertEqual(_sanitize_csv_cell("+SUM(A1:A5)"), "'+SUM(A1:A5)")
+        self.assertEqual(_sanitize_csv_cell("@malicious"), "'@malicious")
+        self.assertEqual(_sanitize_csv_cell("KSh 12,400.00"), "KSh 12,400.00")
+
+    def test_demo_role_switcher_blocks_unauthorized_escalation(self):
         role_sales = Role.objects.create(role_name=Role.RoleName.SALES_AGENT)
         User.objects.create_user(username="admin", password="Password123!", role=self.role_admin, is_superuser=True)
         User.objects.create_user(username="sales", password="Password123!", role=role_sales)
 
-        # Direct non-admin login must receive 403 when attempting to switch to admin
         self.client.login(username="sales", password="Password123!")
         resp = self.client.get(reverse("core:switch_demo_role", args=["admin"]))
         self.assertEqual(resp.status_code, 403)
 
     def test_mark_notification_read_blocks_external_open_redirect(self):
-        from django.urls import reverse
-
         note = Notification.objects.create(
             recipient=self.user,
             title="Test",
@@ -87,11 +104,8 @@ class CoreAuditAndNotificationTests(TestCase):
         self.assertEqual(resp["Location"], reverse("core:notification_list"))
 
     def test_mark_all_read_requires_post(self):
-        from django.urls import reverse
-
         self.client.force_login(self.user)
         get_resp = self.client.get(reverse("core:mark_all_read"))
         self.assertEqual(get_resp.status_code, 405)
         post_resp = self.client.post(reverse("core:mark_all_read"))
         self.assertEqual(post_resp.status_code, 302)
-

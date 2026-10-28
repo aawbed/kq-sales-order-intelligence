@@ -111,7 +111,7 @@ def check_and_alert_anomaly(order):
             pass
 
         if is_anomaly:
-            reason_str = " &bull; ".join(reasons) if reasons else "Unusual order pattern detected."
+            reason_str = " • ".join(reasons) if reasons else "Unusual order pattern detected."
             title = f"ML Anomaly Flagged: Order KQ-{order.order_id}"
             message = (
                 f"Order KQ-{order.order_id} for {order.customer.name} ({order.customer.account_type}) "

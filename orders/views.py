@@ -184,7 +184,12 @@ def generate_invoice(request, order_id):
                 "The order must first be Confirmed and Fulfilled by the Warehouse.",
             )
             return redirect("orders:generate_invoice", order_id=order.order_id)
-        invoice = Invoice.generate(order)
+        with transaction.atomic():
+            locked_order = Order.objects.select_for_update().get(pk=order.pk)
+            if hasattr(locked_order, "invoice"):
+                invoice = locked_order.invoice
+            else:
+                invoice = Invoice.generate(locked_order)
         messages.success(request, f"Invoice #{invoice.invoice_id} generated successfully.")
         return redirect("orders:generate_invoice", order_id=order.order_id)
 
@@ -220,58 +225,59 @@ def generate_invoice(request, order_id):
 
 @sales_or_operations_required
 def record_payment(request, order_id):
-    """Record a payment against an order's invoice."""
+    """Record a payment against an order's invoice with row-level lock against overpayments."""
     order = get_object_or_404(Order, pk=order_id)
     if not hasattr(order, "invoice"):
         messages.error(request, "Cannot record payment: no invoice has been generated for this order.")
         return redirect("orders:order_detail", order_id=order.order_id)
 
-    invoice = order.invoice
     if request.method == "POST":
-        form = PaymentForm(request.POST, invoice=invoice)
-        if form.is_valid():
-            payment = form.save(commit=False)
-            payment.invoice = invoice
-            payment.recorded_by = request.user
-            payment.save()
+        with transaction.atomic():
+            invoice = Invoice.objects.select_for_update().get(pk=order.invoice.pk)
+            form = PaymentForm(request.POST, invoice=invoice)
+            if form.is_valid():
+                payment = form.save(commit=False)
+                payment.invoice = invoice
+                payment.recorded_by = request.user
+                payment.save()
 
-            from core.audit import log_action
+                from core.audit import log_action
 
-            log_action(
-                request=request,
-                action="payment_recorded",
-                target_model="Payment",
-                target_id=f"PAY-{payment.payment_id}",
-                details=(
-                    f"Recorded payment of KSh {payment.amount:,.2f} via {payment.get_method_display()} "
-                    f"(Ref: {payment.reference or 'N/A'}) for Invoice #{invoice.invoice_id} "
-                    f"(Order KQ-{order.order_id}). New invoice balance: KSh {invoice.balance:,.2f}."
-                ),
-            )
+                log_action(
+                    request=request,
+                    action="payment_recorded",
+                    target_model="Payment",
+                    target_id=f"PAY-{payment.payment_id}",
+                    details=(
+                        f"Recorded payment of KSh {payment.amount:,.2f} via {payment.get_method_display()} "
+                        f"(Ref: {payment.reference or 'N/A'}) for Invoice #{invoice.invoice_id} "
+                        f"(Order KQ-{order.order_id}). New invoice balance: KSh {invoice.balance:,.2f}."
+                    ),
+                )
 
-            messages.success(
-                request,
-                f"Payment of KSh {payment.amount:,.2f} recorded via {payment.get_method_display()} "
-                f"(Ref: {payment.reference or 'N/A'}). Invoice balance: KSh {invoice.balance:,.2f}.",
-            )
-            return redirect("orders:generate_invoice", order_id=order.order_id)
-        else:
-            # Re-render invoice page with validation errors
-            items = order.items.all()
-            return render(
-                request,
-                "orders/generate_invoice.html",
-                {
-                    "order": order,
-                    "items": items,
-                    "subtotal": invoice.subtotal,
-                    "vat": invoice.vat_amount,
-                    "total": invoice.total_amount,
-                    "existing_invoice": invoice,
-                    "payments": invoice.payments.select_related("recorded_by").all(),
-                    "payment_form": form,
-                },
-            )
+                messages.success(
+                    request,
+                    f"Payment of KSh {payment.amount:,.2f} recorded via {payment.get_method_display()} "
+                    f"(Ref: {payment.reference or 'N/A'}). Invoice balance: KSh {invoice.balance:,.2f}.",
+                )
+                return redirect("orders:generate_invoice", order_id=order.order_id)
+
+        invoice = order.invoice
+        items = order.items.all()
+        return render(
+            request,
+            "orders/generate_invoice.html",
+            {
+                "order": order,
+                "items": items,
+                "subtotal": invoice.subtotal,
+                "vat": invoice.vat_amount,
+                "total": invoice.total_amount,
+                "existing_invoice": invoice,
+                "payments": invoice.payments.select_related("recorded_by").all(),
+                "payment_form": form,
+            },
+        )
 
     return redirect("orders:generate_invoice", order_id=order.order_id)
 

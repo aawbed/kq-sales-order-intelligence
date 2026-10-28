@@ -21,10 +21,10 @@ class CustomerForm(forms.ModelForm):
             "account_type": forms.Select(
                 choices=[
                     ("", "Select account type..."),
-                    ("Corporate", "Corporate"),
-                    ("Government", "Government"),
+                    ("Corporate Client", "Corporate Client"),
+                    ("Government Entity", "Government Entity"),
                     ("Distributor", "Distributor"),
-                    ("Internal Department", "Internal Department"),
+                    ("KQ Internal Department", "KQ Internal Department"),
                 ],
                 attrs={"class": "form-select"},
             ),

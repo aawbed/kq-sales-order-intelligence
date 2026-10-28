@@ -6,13 +6,11 @@ to segment customers by purchasing behaviour, as reviewed in Chapter 2
 (Customer Sales Trend Analysis).
 """
 
-
 import pandas as pd
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
 from django.utils import timezone
-
+from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+from sklearn.preprocessing import StandardScaler
 
 
 def segment_customers(customer_queryset, n_clusters=None, return_details=False):
@@ -23,17 +21,24 @@ def segment_customers(customer_queryset, n_clusters=None, return_details=False):
     Otherwise returns results list.
     """
     default_metrics = {"silhouette_score": 0.0, "num_customers": 0, "k": 3}
-    default_params = {"algorithm": "K-Means RFM", "n_clusters": 3}
+    default_params = {
+        "algorithm": "K-Means RFM",
+        "display_algorithm": "K-Means (k=3) + StandardScaler",
+        "n_clusters": 3,
+        "features": ["Recency", "Frequency", "Monetary"],
+    }
 
     try:
         if n_clusters is None:
             try:
                 from analytics.models import SystemSetting
+
                 n_clusters = SystemSetting.get_settings().customer_segment_clusters
             except Exception:
                 n_clusters = 3
         n_clusters = max(2, min(6, int(n_clusters)))
         default_params["n_clusters"] = n_clusters
+        default_params["display_algorithm"] = f"K-Means (k={n_clusters}) + StandardScaler"
 
         if not customer_queryset.exists():
             return ([], default_metrics, default_params) if return_details else []
@@ -41,13 +46,13 @@ def segment_customers(customer_queryset, n_clusters=None, return_details=False):
         data = []
         now = timezone.now()
         for customer in customer_queryset:
-            orders = customer.orders.all()
-            if not orders.exists():
+            orders = list(customer.orders.all())
+            if not orders:
                 continue
 
-            recent_order = orders.order_by("-order_date").first()
-            recency = (now - recent_order.order_date).days
-            frequency = orders.count()
+            most_recent_date = max(o.order_date for o in orders)
+            recency = max(0, (now - most_recent_date).days)
+            frequency = len(orders)
             monetary = sum(
                 item.quantity * item.unit_price
                 for order in orders
@@ -56,6 +61,7 @@ def segment_customers(customer_queryset, n_clusters=None, return_details=False):
             data.append({
                 "customer_id": customer.customer_id,
                 "customer_name": customer.name,
+                "account_type": customer.account_type,
                 "recency": recency,
                 "frequency": frequency,
                 "monetary": float(monetary),
@@ -70,6 +76,9 @@ def segment_customers(customer_queryset, n_clusters=None, return_details=False):
         scaled_features = scaler.fit_transform(features)
 
         k = min(n_clusters, len(df))
+        default_params["n_clusters"] = k
+        default_params["display_algorithm"] = f"K-Means (k={k}) + StandardScaler"
+
         kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
         df["cluster"] = kmeans.fit_predict(scaled_features)
 
@@ -94,9 +103,10 @@ def segment_customers(customer_queryset, n_clusters=None, return_details=False):
         }
         labels = labels_palette.get(k, ["VIP/High-Volume", "Regular", "At-Risk/Dormant"])
 
-        cluster_to_label = {}
-        for i, cluster in enumerate(sorted_clusters):
-            cluster_to_label[cluster] = labels[i] if i < len(labels) else f"Tier {i+1}"
+        cluster_to_label = {
+            cluster: (labels[i] if i < len(labels) else f"Tier {i + 1}")
+            for i, cluster in enumerate(sorted_clusters)
+        }
 
         df["cluster_label"] = df["cluster"].map(cluster_to_label)
         df.drop(columns=["rfm_composite"], inplace=True)

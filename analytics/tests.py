@@ -2,20 +2,16 @@ from datetime import timedelta
 from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Role
-from analytics.ml.anomaly_detection import detect_anomalies
-from analytics.ml.customer_segmentation import segment_customers
-from analytics.ml.forecasting import forecast_demand
 from analytics.ml.pipeline import (
     train_and_persist_anomalies,
     train_and_persist_forecasting,
     train_and_persist_segmentation,
 )
 from analytics.models import (
-    CustomerSegmentRecord,
-    DemandForecastRecord,
     MLModelRun,
     OrderAnomalyRecord,
     SystemSetting,
@@ -41,7 +37,6 @@ class AnalyticsAndMLUnitTests(TestCase):
         )
         Stock.objects.create(product=self.product, quantity_on_hand=5000, reorder_level=500)
 
-        # Create 10 customers
         self.customers = []
         for i in range(10):
             c = Customer.objects.create(
@@ -51,7 +46,6 @@ class AnalyticsAndMLUnitTests(TestCase):
             )
             self.customers.append(c)
 
-        # Create orders spanning past 30 days
         now = timezone.now()
         for idx in range(30):
             order_date = now - timedelta(days=30 - idx)
@@ -61,10 +55,8 @@ class AnalyticsAndMLUnitTests(TestCase):
                 created_by=self.user,
                 status=Order.Status.CONFIRMED,
             )
-            order.order_date = order_date
-            order.save()
+            Order.objects.filter(pk=order.pk).update(order_date=order_date)
 
-            # Normal order: 10-30 units, one spike at day 28: 500 units
             qty = 500 if idx == 28 else (10 + (idx % 5) * 5)
             OrderItem.objects.create(
                 order=order,
@@ -90,6 +82,7 @@ class AnalyticsAndMLUnitTests(TestCase):
         self.assertIn("mae", run.metrics)
         self.assertIn("rmse", run.metrics)
         self.assertEqual(run.parameters.get("seasonal_order"), [1, 0, 1, 7])
+        self.assertEqual(run.parameters.get("display_algorithm"), "SARIMAX (1,1,1)(1,0,1,7)")
 
         first_rec = records[0]
         self.assertGreater(first_rec.predicted_quantity, 0)
@@ -102,7 +95,6 @@ class AnalyticsAndMLUnitTests(TestCase):
         self.assertGreater(len(records), 0)
         self.assertIn("silhouette_score", run.metrics)
 
-        # Check fields of segment records
         seg_record = records[0]
         self.assertIsNotNone(seg_record.cluster_label)
         self.assertGreaterEqual(seg_record.monetary_spend, 0)
@@ -113,17 +105,50 @@ class AnalyticsAndMLUnitTests(TestCase):
         self.assertEqual(run.model_type, MLModelRun.ModelType.ANOMALY)
         self.assertIn("total_orders", run.metrics)
         self.assertIn("anomalies_detected", run.metrics)
+        self.assertIn("Customer Value Z-Score", run.parameters.get("features", []))
 
-        if records:
-            anomaly = records[0]
-            self.assertEqual(anomaly.review_status, OrderAnomalyRecord.ReviewStatus.PENDING)
+        self.assertGreater(len(records), 0)
+        anomaly = records[0]
+        self.assertEqual(anomaly.review_status, OrderAnomalyRecord.ReviewStatus.PENDING)
 
-            # Operations Manager reviews anomaly
-            anomaly.review_status = OrderAnomalyRecord.ReviewStatus.CONFIRMED
-            anomaly.reviewed_by = self.user
-            anomaly.review_notes = "Confirmed spike due to major airport VIP summit."
-            anomaly.save()
+        # Verify review_anomaly view updates live precision AND blocks external open redirects
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            reverse("analytics:review_anomaly", args=[anomaly.anomaly_id]),
+            {
+                "review_status": OrderAnomalyRecord.ReviewStatus.CONFIRMED,
+                "review_notes": "Confirmed spike due to major airport VIP summit.",
+                "next": "https://evil.example.com/phish",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp["Location"], reverse("analytics:dashboard"))
 
-            anomaly.refresh_from_db()
-            self.assertEqual(anomaly.review_status, OrderAnomalyRecord.ReviewStatus.CONFIRMED)
-            self.assertEqual(anomaly.reviewed_by, self.user)
+        anomaly.refresh_from_db()
+        run.refresh_from_db()
+        self.assertEqual(anomaly.review_status, OrderAnomalyRecord.ReviewStatus.CONFIRMED)
+        self.assertEqual(run.metrics.get("precision"), 1.0)
+
+    def test_model_performance_displays_dynamic_algorithm_and_reports_have_complete_columns(self):
+        train_and_persist_forecasting(user=self.user, periods=14)
+        train_and_persist_segmentation(user=self.user, n_clusters=3)
+        train_and_persist_anomalies(user=self.user, contamination=0.1)
+
+        self.client.force_login(self.user)
+        perf_resp = self.client.get(reverse("analytics:model_performance"))
+        self.assertEqual(perf_resp.status_code, 200)
+        perf_html = perf_resp.content.decode("utf-8")
+        self.assertIn("SARIMAX (1,1,1)(1,0,1,7)", perf_html)
+        self.assertIn("Customer Value Z-Score", perf_html)
+
+        # Verify Anomaly Alerts report populates real dates, account types, and values
+        anom_resp = self.client.get(reverse("analytics:generate_reports") + "?report_type=anomaly_alerts")
+        self.assertEqual(anom_resp.status_code, 200)
+        anom_html = anom_resp.content.decode("utf-8")
+        self.assertNotIn("<td>N/A</td>", anom_html)
+
+        # Verify Customer Segments report populates real account types (no N/A)
+        seg_resp = self.client.get(reverse("analytics:generate_reports") + "?report_type=customer_segments")
+        self.assertEqual(seg_resp.status_code, 200)
+        seg_html = seg_resp.content.decode("utf-8")
+        self.assertNotIn("<td>N/A</td>", seg_html)

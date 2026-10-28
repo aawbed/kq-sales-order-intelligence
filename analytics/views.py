@@ -1,5 +1,4 @@
 import csv
-import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 from io import StringIO
@@ -9,6 +8,7 @@ from django.db import models
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from analytics.models import (
     CustomerSegmentRecord,
@@ -25,19 +25,31 @@ from core.permissions import (
     operations_or_admin_required,
     system_administrator_required,
 )
+from core.views import _safe_redirect_url, _sanitize_csv_cell
 from inventory.models import Stock
 from orders.models import Customer, Invoice, Order, OrderItem, Payment
+
+
+def _compute_live_review_stats():
+    """Return (total_reviewed, confirmed_count, precision_ratio_or_None) across human reviews."""
+    reviewed_qs = OrderAnomalyRecord.objects.exclude(
+        review_status=OrderAnomalyRecord.ReviewStatus.PENDING
+    )
+    total_reviewed = reviewed_qs.count()
+    confirmed_count = reviewed_qs.filter(
+        review_status=OrderAnomalyRecord.ReviewStatus.CONFIRMED
+    ).count()
+    precision = round(confirmed_count / total_reviewed, 4) if total_reviewed > 0 else None
+    return total_reviewed, confirmed_count, precision
 
 
 @operations_manager_required
 def dashboard(request):
     """Figure 3.7h: Operations Manager — Sales Dashboard with live KPIs and ML outputs."""
     now = timezone.now()
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)
 
     # --- KPI Calculations ---
-    # Total sales (Last 30 days)
     thirty_days_ago = now - timedelta(days=30)
     recent_orders = Order.objects.filter(order_date__gte=thirty_days_ago)
     recent_revenue = OrderItem.objects.filter(
@@ -46,15 +58,12 @@ def dashboard(request):
         total=models.Sum(models.F("quantity") * models.F("unit_price"))
     )["total"] or 0
 
-    # Orders this week
     weekly_orders = Order.objects.filter(order_date__gte=week_ago).count()
 
-    # Low stock alerts
     low_stock_count = Stock.objects.filter(
         quantity_on_hand__lte=models.F("reorder_level")
     ).count()
 
-    # Active customers
     active_customers = Customer.objects.count()
 
     # --- Persisted ML Outputs ---
@@ -66,15 +75,27 @@ def dashboard(request):
     forecast_run = MLModelRun.objects.filter(
         model_type=MLModelRun.ModelType.FORECASTING, status="completed"
     ).first()
+    anomaly_run = MLModelRun.objects.filter(
+        model_type=MLModelRun.ModelType.ANOMALY, status="completed"
+    ).first()
+    segment_run = MLModelRun.objects.filter(
+        model_type=MLModelRun.ModelType.SEGMENTATION, status="completed"
+    ).first()
+
     cache_expired = (
         forecast_run is not None
         and system_cfg.forecast_cache_timeout > 0
         and (now - forecast_run.run_date).total_seconds() > system_cfg.forecast_cache_timeout * 60
     )
-    if not forecast_run or cache_expired:
+
+    if not forecast_run or not anomaly_run or not segment_run or cache_expired:
         try:
-            from analytics.ml.pipeline import train_and_persist_forecasting
-            forecast_run, _ = train_and_persist_forecasting(user=request.user)
+            from analytics.ml.pipeline import run_all_ml_pipelines
+
+            runs = run_all_ml_pipelines(user=request.user)
+            forecast_run = runs["forecasting"]
+            segment_run = runs["segmentation"]
+            anomaly_run = runs["anomaly"]
         except Exception:
             pass
 
@@ -82,19 +103,10 @@ def dashboard(request):
         list(forecast_run.forecast_records.all()[:forecast_horizon])
         if forecast_run else []
     )
-    forecast_labels = json.dumps([r.forecast_date.strftime("%Y-%m-%d") for r in forecast_records])
-    forecast_values = json.dumps([round(float(r.predicted_quantity), 1) for r in forecast_records])
-
-    # 2. Isolation Forest Anomalies
-    anomaly_run = MLModelRun.objects.filter(
-        model_type=MLModelRun.ModelType.ANOMALY, status="completed"
-    ).first()
-    if not anomaly_run:
-        try:
-            from analytics.ml.pipeline import train_and_persist_anomalies
-            anomaly_run, _ = train_and_persist_anomalies(user=request.user)
-        except Exception:
-            anomaly_run = None
+    forecast_labels_list = [r.forecast_date.strftime("%Y-%m-%d") for r in forecast_records]
+    forecast_values_list = [round(float(r.predicted_quantity), 1) for r in forecast_records]
+    forecast_lower_list = [round(float(r.confidence_lower), 1) for r in forecast_records]
+    forecast_upper_list = [round(float(r.confidence_upper), 1) for r in forecast_records]
 
     anomalies = []
     reviewed_anomalies = []
@@ -110,17 +122,6 @@ def dashboard(request):
             ).select_related("order__customer", "reviewed_by").all()[:10]
         )
 
-    # 3. K-Means Customer Segments
-    segment_run = MLModelRun.objects.filter(
-        model_type=MLModelRun.ModelType.SEGMENTATION, status="completed"
-    ).first()
-    if not segment_run:
-        try:
-            from analytics.ml.pipeline import train_and_persist_segmentation
-            segment_run, _ = train_and_persist_segmentation(user=request.user)
-        except Exception:
-            segment_run = None
-
     segments = (
         list(segment_run.segment_records.select_related("customer").all())
         if segment_run else []
@@ -131,10 +132,12 @@ def dashboard(request):
         "weekly_orders": weekly_orders,
         "low_stock_count": low_stock_count,
         "active_customers": active_customers,
-        "forecast_labels": forecast_labels,
-        "forecast_values": forecast_values,
+        "forecast_labels_list": forecast_labels_list,
+        "forecast_values_list": forecast_values_list,
+        "forecast_lower_list": forecast_lower_list,
+        "forecast_upper_list": forecast_upper_list,
         "forecast_horizon": forecast_horizon,
-        "forecast_confidence": int(forecast_confidence * 100),
+        "forecast_confidence": int(round(forecast_confidence * 100)),
         "forecast_run": forecast_run,
         "anomaly_run": anomaly_run,
         "segment_run": segment_run,
@@ -204,23 +207,28 @@ def generate_reports(request):
                 f"KSh {o_sub:,.2f}",
                 f"KSh {o_vat:,.2f}",
                 f"KSh {o_tot:,.2f}",
-                o.get_status_display()
+                o.get_status_display(),
             ])
         summary_text = f"Total Orders: {len(rows)} | Total Water Units Demanded: {total_units:,} | Cumulative Billed Revenue: KSh {total_rev:,.2f}"
 
     elif report_type == "demand_forecast":
+        system_cfg = SystemSetting.get_settings()
+        horizon = system_cfg.forecast_horizon_days
         title = "SARIMAX Predictive Water Demand Forecast Matrix"
-        subtitle = "Projected daily catering water consumption (Next 30 Days)"
-        headers = ["Forecast Date", "Day of Week", "Predicted Demand (Units)", "Recommended Production Target"]
+        subtitle = f"Projected daily catering water consumption (Next {horizon} Days)"
+        headers = ["Forecast Date", "Day of Week", "Predicted Demand (Units)", "Lower Bound", "Upper Bound", "Recommended Production Target"]
         from analytics.ml.forecasting import forecast_demand
+
         try:
-            fc_data = forecast_demand(all_orders)
+            fc_data = forecast_demand(all_orders, periods=horizon)
         except Exception:
             fc_data = []
 
         total_fc = 0.0
-        for item in fc_data[:30]:
+        for item in fc_data[:horizon]:
             qty = round(float(item.get("predicted_quantity", 0)), 1)
+            low = round(float(item.get("confidence_lower", 0)), 1)
+            high = round(float(item.get("confidence_upper", 0)), 1)
             total_fc += qty
             dt_str = item.get("date", "")
             try:
@@ -229,61 +237,73 @@ def generate_reports(request):
             except Exception:
                 dow = "N/A"
             rec_prod = round(qty * 1.15, 1)  # 15% safety stock buffer
-            rows.append([dt_str, dow, f"{qty:,.1f}", f"{rec_prod:,.1f}"])
-        summary_text = f"30-Day Cumulative Forecasted Volume: {total_fc:,.1f} units | Includes 15% catering safety buffer"
+            rows.append([dt_str, dow, f"{qty:,.1f}", f"{low:,.1f}", f"{high:,.1f}", f"{rec_prod:,.1f}"])
+        summary_text = f"{horizon}-Day Cumulative Forecasted Volume: {total_fc:,.1f} units | Includes 15% catering safety buffer"
 
     elif report_type == "anomaly_alerts":
+        system_cfg = SystemSetting.get_settings()
         title = "Order Anomaly Detection Audit Report"
-        headers = ["Order #", "Customer Account", "Order Date", "Account Type", "Total Qty", "Order Value (KES)", "Anomaly Score", "Flag Status"]
+        headers = ["Order #", "Customer Account", "Order Date", "Account Type", "Total Qty", "Order Value (KES)", "Anomaly Score", "Explanation"]
         from analytics.ml.anomaly_detection import detect_anomalies
+
         try:
-            anom_data = detect_anomalies(all_orders)
+            anom_data = detect_anomalies(all_orders, contamination=system_cfg.anomaly_contamination)
         except Exception:
             anom_data = []
 
         flagged_count = 0
         for item in anom_data:
-            is_anom = item.get("is_anomaly", False)
-            if is_anom:
+            if item.get("is_anomaly", False):
                 flagged_count += 1
             o_id = item.get("order_id", "")
             score = round(float(item.get("anomaly_score", 0)), 4)
             val = round(float(item.get("total_value", 0)), 2)
-            qty = item.get("quantity", 0)
+            qty = int(item.get("quantity", 0))
             rows.append([
                 f"KQ-{o_id}",
-                item.get("order_date", "")[:10],
                 item.get("customer_name", "N/A"),
+                item.get("order_date", "")[:10],
                 item.get("account_type", "N/A"),
                 f"{qty:,}",
                 f"KSh {val:,.2f}",
                 f"{score:.4f}",
-                "FLAGGED ANOMALY" if is_anom else "Normal"
+                item.get("explanation", "FLAGGED ANOMALY"),
             ])
-        summary_text = f"Total Orders Analyzed: {len(rows)} | Orders Flagged for Review: {flagged_count} | Contamination Threshold: 5%"
+        summary_text = (
+            f"Total Orders Analyzed: {all_orders.count()} | "
+            f"Orders Flagged for Review: {flagged_count} | "
+            f"Contamination Threshold: {system_cfg.anomaly_contamination * 100:.1f}%"
+        )
 
     elif report_type == "customer_segments":
+        system_cfg = SystemSetting.get_settings()
         title = "Customer Purchasing Behaviour & RFM Segmentation"
         headers = ["Customer Account", "Account Type", "Recency (Days)", "Frequency (Orders)", "Monetary Spend (KES)", "Assigned Cluster Segment"]
         from analytics.ml.customer_segmentation import segment_customers
+
         try:
-            seg_data = segment_customers(all_customers)
+            seg_data = segment_customers(all_customers, n_clusters=system_cfg.customer_segment_clusters)
         except Exception:
             seg_data = []
 
+        distinct_labels = []
         for item in seg_data:
             rec = item.get("recency", 0)
             freq = item.get("frequency", 0)
             mon = round(float(item.get("monetary", 0)), 2)
+            lbl = item.get("cluster_label", "Regular")
+            if lbl not in distinct_labels:
+                distinct_labels.append(lbl)
             rows.append([
                 item.get("customer_name", "N/A"),
                 item.get("account_type", "N/A"),
                 f"{rec} days",
                 f"{freq} orders",
                 f"KSh {mon:,.2f}",
-                item.get("cluster_label", "Regular")
+                lbl,
             ])
-        summary_text = f"Total Customer Accounts Profiled: {len(rows)} | K-Means Clusters: VIP / High-Volume, Regular, At-Risk / Dormant"
+        clusters_str = ", ".join(distinct_labels) if distinct_labels else "None"
+        summary_text = f"Total Customer Accounts Profiled: {len(rows)} | K-Means (k={system_cfg.customer_segment_clusters}) Clusters: {clusters_str}"
 
     elif report_type == "accounts_receivable":
         title = "Accounts Receivable & Ageing Summary Report"
@@ -311,27 +331,27 @@ def generate_reports(request):
                 f"KSh {t:,.2f}",
                 f"KSh {p:,.2f}",
                 f"KSh {b:,.2f}",
-                inv.get_payment_status_display()
+                inv.get_payment_status_display(),
             ])
         summary_text = f"Total Invoiced: KSh {tot_inv:,.2f} | Total Collected: KSh {tot_paid:,.2f} | Outstanding Receivables: KSh {tot_bal:,.2f}"
 
     # Handle Exports
     clean_type = report_type.replace("_", "-")
     time_tag = now.strftime("%Y%m%d_%H%M")
-    
+
     if action == "csv":
         out = StringIO()
-        out.write('\ufeff')  # UTF-8 BOM for Microsoft Excel compatibility
+        out.write("\ufeff")  # UTF-8 BOM for Microsoft Excel compatibility
         writer = csv.writer(out)
-        writer.writerow([f"KENYA AIRWAYS — {title}"])
+        writer.writerow([_sanitize_csv_cell(f"KENYA AIRWAYS — {title}")])
         writer.writerow([f"Generated: {now.strftime('%Y-%m-%d %H:%M:%S')}", f"Period: {date_from} to {date_to}"])
         writer.writerow([])
-        writer.writerow(headers)
+        writer.writerow([_sanitize_csv_cell(h) for h in headers])
         for r in rows:
-            writer.writerow(r)
+            writer.writerow([_sanitize_csv_cell(cell) for cell in r])
         if summary_text:
             writer.writerow([])
-            writer.writerow(["SUMMARY NOTES", summary_text])
+            writer.writerow(["SUMMARY NOTES", _sanitize_csv_cell(summary_text)])
 
         resp = HttpResponse(out.getvalue(), content_type="text/csv; charset=utf-8")
         resp["Content-Disposition"] = f'attachment; filename="KQ_{clean_type}_{time_tag}.csv"'
@@ -344,18 +364,17 @@ def generate_reports(request):
             headers=headers,
             rows=rows,
             summary_text=summary_text,
-            landscape_mode=True
+            landscape_mode=True,
         )
         resp = HttpResponse(pdf_bytes, content_type="application/pdf")
         resp["Content-Disposition"] = f'attachment; filename="KQ_{clean_type}_{time_tag}.pdf"'
         return resp
 
-    # Default: Preview in UI and log generated report
     if request.user.is_authenticated:
         Report.objects.create(
             report_type=report_type,
             generated_by=request.user,
-            data={"rows_count": len(rows), "date_from": str(date_from), "date_to": str(date_to), "title": title}
+            data={"rows_count": len(rows), "date_from": str(date_from), "date_to": str(date_to), "title": title},
         )
 
     context = {
@@ -369,7 +388,7 @@ def generate_reports(request):
         "summary_text": summary_text,
         "report_types": [
             ("sales_summary", "Historical Sales Summary"),
-            ("demand_forecast", "Demand Forecast Matrix (Next 30 Days)"),
+            ("demand_forecast", "Demand Forecast Matrix"),
             ("anomaly_alerts", "Anomaly Alerts Audit"),
             ("customer_segments", "Customer Segments (RFM)"),
             ("accounts_receivable", "Accounts Receivable Summary"),
@@ -396,7 +415,6 @@ def system_settings(request):
         email_alerts = request.POST.get("email_alerts_anomaly") == "on"
         stock_alerts = request.POST.get("stock_alerts_warehouse") == "on"
 
-        # Validate confidence (0.50 - 0.99)
         try:
             confidence = float(confidence_str)
             if not (0.50 <= confidence <= 0.99):
@@ -404,7 +422,6 @@ def system_settings(request):
         except ValueError:
             errors["forecast_confidence"] = "Please enter a valid decimal number."
 
-        # Validate horizon (7 - 90 days)
         try:
             horizon = int(horizon_str)
             if not (7 <= horizon <= 90):
@@ -412,7 +429,6 @@ def system_settings(request):
         except ValueError:
             errors["forecast_horizon_days"] = "Please enter a valid whole number of days."
 
-        # Validate cache timeout (5 - 1440 mins)
         try:
             cache_timeout = int(cache_timeout_str)
             if not (5 <= cache_timeout <= 1440):
@@ -420,7 +436,6 @@ def system_settings(request):
         except ValueError:
             errors["forecast_cache_timeout"] = "Please enter a valid whole number of minutes."
 
-        # Validate anomaly contamination (0.01 - 0.20)
         try:
             contamination = float(contamination_str)
             if not (0.01 <= contamination <= 0.20):
@@ -428,7 +443,6 @@ def system_settings(request):
         except ValueError:
             errors["anomaly_contamination"] = "Please enter a valid decimal rate."
 
-        # Validate clusters (2 - 6)
         try:
             clusters = int(clusters_str)
             if not (2 <= clusters <= 6):
@@ -446,8 +460,6 @@ def system_settings(request):
             settings_obj.stock_alerts_warehouse = stock_alerts
             settings_obj.updated_by = request.user
             settings_obj.save()
-
-            from core.audit import log_action
 
             log_action(
                 request=request,
@@ -474,14 +486,11 @@ def accounts_receivable(request):
     """
     Accounts Receivable Dashboard:
     Tracks invoiced vs collected revenue, outstanding balances,
-    and ageing buckets (0-30, 31-60, 61-90, 90+ days) per the Invoicing
-    and Reporting Module specification.
+    and ageing buckets (0-30, 31-60, 61-90, 90+ days).
     """
     today = timezone.now().date()
-
     invoices = Invoice.objects.select_related("order__customer").prefetch_related("payments").all()
 
-    # Query filters
     q = request.GET.get("q", "").strip()
     status_filter = request.GET.get("status", "").strip()
     ageing_filter = request.GET.get("ageing", "").strip()
@@ -490,7 +499,6 @@ def accounts_receivable(request):
     total_invoiced = Decimal("0.00")
     total_collected = Decimal("0.00")
 
-    # Buckets: amounts and counts
     buckets = {
         "current": {"label": "0–30 Days (Current)", "amount": Decimal("0.00"), "count": 0, "badge": "success"},
         "month1": {"label": "31–60 Days", "amount": Decimal("0.00"), "count": 0, "badge": "info"},
@@ -509,7 +517,6 @@ def accounts_receivable(request):
         total_invoiced += tot
         total_collected += paid
 
-        # Determine ageing bucket
         if age_days <= 30:
             b_key = "current"
         elif age_days <= 60:
@@ -523,7 +530,6 @@ def accounts_receivable(request):
             buckets[b_key]["amount"] += bal
             buckets[b_key]["count"] += 1
 
-        # Check filters for table display
         inv_data = {
             "invoice": inv,
             "order": inv.order,
@@ -536,7 +542,6 @@ def accounts_receivable(request):
             "status": inv.payment_status,
         }
 
-        # Apply filters
         match = True
         if q:
             q_lower = q.lower()
@@ -546,11 +551,11 @@ def accounts_receivable(request):
                 or q in str(inv.order.order_id)
             )
         if match and status_filter:
-            match = (inv.payment_status == status_filter)
+            match = inv.payment_status == status_filter
         if match and ageing_filter:
-            match = (b_key == ageing_filter)
+            match = b_key == ageing_filter
         if match and account_type_filter:
-            match = (inv.order.customer.account_type == account_type_filter)
+            match = inv.order.customer.account_type == account_type_filter
 
         if match:
             invoice_list.append(inv_data)
@@ -558,9 +563,12 @@ def accounts_receivable(request):
     total_outstanding = max(Decimal("0.00"), total_invoiced - total_collected)
     collection_rate = round((total_collected / total_invoiced * 100), 1) if total_invoiced > 0 else 0.0
 
-    # Calculate percentages for buckets
     for b in buckets.values():
         b["percent"] = round((b["amount"] / total_outstanding * 100), 1) if total_outstanding > 0 else 0.0
+
+    canonical_types = ["KQ Internal Department", "Corporate Client", "Government Entity", "Distributor"]
+    db_types = list(Customer.objects.values_list("account_type", flat=True).distinct())
+    account_types = list(dict.fromkeys(canonical_types + [t for t in db_types if t]))
 
     context = {
         "total_invoiced": total_invoiced,
@@ -573,7 +581,7 @@ def accounts_receivable(request):
         "status_filter": status_filter,
         "ageing_filter": ageing_filter,
         "account_type_filter": account_type_filter,
-        "account_types": ["KQ Internal Department", "Corporate Client", "Government Entity", "Distributor"],
+        "account_types": account_types,
     }
     return render(request, "analytics/accounts_receivable.html", context)
 
@@ -582,7 +590,7 @@ def accounts_receivable(request):
 def model_performance(request):
     """
     Model Retraining and Validation Performance Dashboard.
-    Provides real-time model evaluation metrics (MAE, RMSE, MAPE, Silhouette, Contamination, Precision)
+    Provides real-time model evaluation metrics (MAE, RMSE, WMAPE, Silhouette, Contamination, Precision)
     and allows authorized managers and administrators to trigger retraining.
     """
     if request.method == "POST":
@@ -631,16 +639,17 @@ def model_performance(request):
         model_type=MLModelRun.ModelType.ANOMALY, status="completed"
     ).first()
 
+    total_anomalies_reviewed, _, live_precision = _compute_live_review_stats()
+    live_precision_pct = round(live_precision * 100.0, 1) if live_precision is not None else None
+
     history = MLModelRun.objects.select_related("trained_by").all()[:25]
     total_runs = MLModelRun.objects.count()
-    total_anomalies_reviewed = OrderAnomalyRecord.objects.exclude(
-        review_status=OrderAnomalyRecord.ReviewStatus.PENDING
-    ).count()
 
     context = {
         "latest_forecasting": latest_forecasting,
         "latest_segmentation": latest_segmentation,
         "latest_anomaly": latest_anomaly,
+        "live_precision_pct": live_precision_pct,
         "history": history,
         "total_runs": total_runs,
         "total_anomalies_reviewed": total_anomalies_reviewed,
@@ -649,43 +658,56 @@ def model_performance(request):
 
 
 @operations_manager_required
+@require_POST
 def review_anomaly(request, anomaly_id):
     """
     Operations Manager Human-in-the-Loop review endpoint.
-    Confirms or dismisses (false positive) flagged order anomalies.
+    Confirms or dismisses (false positive) flagged order anomalies and updates run precision.
     """
     anomaly = get_object_or_404(OrderAnomalyRecord, pk=anomaly_id)
-    if request.method == "POST":
-        status_val = request.POST.get("review_status")
-        notes = request.POST.get("review_notes", "").strip()
+    status_val = request.POST.get("review_status")
+    notes = request.POST.get("review_notes", "").strip()
 
-        if status_val in [
-            OrderAnomalyRecord.ReviewStatus.CONFIRMED,
-            OrderAnomalyRecord.ReviewStatus.FALSE_POSITIVE,
-        ]:
-            anomaly.review_status = status_val
-            anomaly.reviewed_by = request.user
-            anomaly.reviewed_at = timezone.now()
-            anomaly.review_notes = notes
-            anomaly.save()
+    if status_val in [
+        OrderAnomalyRecord.ReviewStatus.CONFIRMED,
+        OrderAnomalyRecord.ReviewStatus.FALSE_POSITIVE,
+    ]:
+        anomaly.review_status = status_val
+        anomaly.reviewed_by = request.user
+        anomaly.reviewed_at = timezone.now()
+        anomaly.review_notes = notes
+        anomaly.save()
 
-            log_action(
-                user=request.user,
-                action="review_order_anomaly",
-                target_model="OrderAnomalyRecord",
-                target_id=str(anomaly_id),
-                details=f"Order KQ-{anomaly.order.order_id} reviewed as {anomaly.get_review_status_display()}: {notes}",
-                request=request,
-            )
-            messages.success(
-                request,
-                f"Order KQ-{anomaly.order.order_id} marked as '{anomaly.get_review_status_display()}'.",
-            )
-        else:
-            messages.error(request, "Invalid review status.")
+        # Immediately update precision metrics on the parent MLModelRun so UI reflects human review
+        total_reviewed, confirmed_count, precision = _compute_live_review_stats()
+        run = anomaly.model_run
+        metrics = dict(run.metrics or {})
+        metrics["reviewed_count"] = total_reviewed
+        metrics["confirmed_count"] = confirmed_count
+        metrics["precision"] = precision
+        run.metrics = metrics
+        run.save(update_fields=["metrics"])
 
-    next_url = request.POST.get("next") or request.GET.get("next") or "analytics:dashboard"
-    try:
-        return redirect(next_url)
-    except Exception:
-        return redirect("analytics:dashboard")
+        log_action(
+            user=request.user,
+            action="review_order_anomaly",
+            target_model="OrderAnomalyRecord",
+            target_id=str(anomaly_id),
+            details=f"Order KQ-{anomaly.order.order_id} reviewed as {anomaly.get_review_status_display()}: {notes}",
+            request=request,
+        )
+        messages.success(
+            request,
+            f"Order KQ-{anomaly.order.order_id} marked as '{anomaly.get_review_status_display()}'.",
+        )
+    else:
+        messages.error(request, "Invalid review status.")
+
+    candidate = request.POST.get("next") or request.GET.get("next") or ""
+    allowed_named_routes = {"analytics:dashboard", "analytics:model_performance"}
+    if candidate in allowed_named_routes:
+        return redirect(candidate)
+    safe_url = _safe_redirect_url(request, candidate)
+    if safe_url:
+        return redirect(safe_url)
+    return redirect("analytics:dashboard")
