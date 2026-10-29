@@ -2,8 +2,8 @@
 
 **Target Environments:** PythonAnywhere (Primary Cloud Host) / Railway / Docker / Linux VPS  
 **Database:** Cloud MySQL 8.0 (Production) / SQLite 3 (Development)  
-**Framework:** Django 4.2 LTS / Python 3.12  
-**Document Version:** 1.0  
+**Framework:** Django 5.1 / Python 3.12  
+**Document Version:** 1.2.1  
 
 ---
 
@@ -184,5 +184,5 @@ The repository includes automated CI via **GitHub Actions** (`.github/workflows/
 - Runs automatically on every `push` and `pull_request` targeting `main`.
 - Sets up Python 3.12 and installs system C libraries (`default-libmysqlclient-dev`).
 - Runs `python manage.py migrate`.
-- Executes the full 16-test suite (unit tests and order-to-cash integration test).
+- Executes the full 29-test suite (unit, integration, RBAC, XSS/CSV security, and ML pipeline tests).
 - Status badge updates live on `README.md`.

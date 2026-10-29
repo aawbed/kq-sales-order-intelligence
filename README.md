@@ -9,16 +9,16 @@ University).
 
 ## Core Features
 
-- **Sales Order Management (Figure 3.7b–3.7d):** Real-time booking, line-item totals, order tracking, and flight-critical priority assignment (`Normal`, `High`, `Urgent`).
-- **Warehouse Inventory & Fulfilment (Figure 3.7f–3.7g):** Stock levels, safety stock reorder thresholds, automated low-stock warnings, and priority-ranked fulfilment dispatch queue.
-- **Financial Billing & Accounts Receivable (Figure 3.7e, 3.7j):** Automated invoice generation with 16% Kenya VAT, multi-channel payment recording (M-Pesa, Bank Transfer, Cash, Cheque, Internal Journal), and accounts receivable aging analysis.
-- **Machine Learning Intelligence Layer (Figure 3.5, 3.7h):**
-  - **Demand Forecasting:** SARIMAX time-series model predicting daily water order volume with 85% confidence intervals.
-  - **Anomaly Detection:** Isolation Forest ensemble flagging statistical spikes and irregular order patterns with Human-in-the-Loop review.
-  - **Customer Segmentation:** K-Means clustering performing RFM (Recency, Frequency, Monetary) behavioral analysis.
-  - **Model Feedback & Retraining Loop:** Persisted ML run logs, accuracy metrics (MAE, RMSE, MAPE, Silhouette Score, Anomaly Precision), and on-demand model retraining.
-- **Enterprise Security & Audit Trail (Figure 3.7k):** Role-Based Access Control (RBAC) across 4 roles, brute-force defense (5 failed attempts lockout), rolling 30-minute idle session timeout, and immutable security audit logs with CSV export.
-- **Reporting & Exports (Figure 3.7i):** Generate reports across 5 operational dimensions with branded Kenya Airways ReportLab PDF and CSV downloads.
+- **Sales Order Management (Figure 4.6b–4.6d):** Real-time booking, line-item totals, order tracking, and flight-critical priority assignment (`Normal`, `High`, `Urgent`).
+- **Warehouse Inventory & Fulfilment (Figure 4.6f–4.6g):** Stock levels, safety stock reorder thresholds, automated low-stock warnings, and priority-ranked fulfilment dispatch queue.
+- **Financial Billing & Accounts Receivable (Figure 4.6e, 4.6j):** Automated invoice generation with 16% Kenya VAT, multi-channel payment recording (M-Pesa, Bank Transfer, Cash, Cheque, Internal Journal), and accounts receivable aging analysis.
+- **Machine Learning Intelligence Layer (Figure 4.5, 4.6h):**
+  - **Demand Forecasting:** SARIMAX time-series model predicting daily water order volume with 85% confidence intervals and 95th-percentile spike winsorization.
+  - **Anomaly Detection:** Isolation Forest ensemble flagging statistical spikes and irregular order patterns across per-customer Z-scores with Human-in-the-Loop review.
+  - **Customer Segmentation:** K-Means clustering performing 4-tier RFM (Recency, Frequency, Monetary) behavioral analysis.
+  - **Model Feedback & Retraining Loop:** Persisted ML run logs, accuracy metrics (MAE, 7-Day Naive Baseline MAE, RMSE, 7-Day WMAPE, Silhouette Score, Live Review Precision), and on-demand model retraining.
+- **Enterprise Security & Audit Trail (Figure 4.6k):** Role-Based Access Control (RBAC) across 4 roles, brute-force defense (5 failed attempts lockout), rolling 30-minute idle session timeout, and immutable security audit logs with CSV export.
+- **Reporting & Exports (Figure 4.6i):** Generate reports across 5 operational dimensions with branded Kenya Airways ReportLab PDF and sanitized CSV downloads.
 
 ## User Roles
 
@@ -105,8 +105,8 @@ kq-sales-order-intelligence/
 - **`v1.0.0` — Initial End-to-End Prototype:** Core 4-role RBAC, Order-to-Cash workflow, and baseline ML modules.
 - **`v1.1.0` — Presentation & Demo Mode Release:** Branded KQ UI overhaul, presentation role switcher, PDF/CSV exports, and 27 automated tests.
 - **`v1.2.0` — Security Hardening, Workflow Validation & Seasonal ML Release:** Restricted demo persona switching, strict state-machine and stock sufficiency enforcement, weekly SARIMAX seasonality (`s=7`), and composite RFM clustering.
+- **`v1.2.1` — Full-System Coherence, Security & ML Calibration Release:** Synchronized 3-model ML pipelines with 95th-percentile spike winsorization (`MAE = 55.93`, `Silhouette = 0.452`), live human-review precision updates, Stored XSS & CSV formula-injection defenses, custom 404/500 pages, and 29 automated tests.
 
 ## Licence & Access Conditions
 
 This repository is developed and submitted as an academic final-year project for the **Bachelor of Science in Informatics and Computer Science** at **Strathmore University**. All source code is publicly accessible for academic examination and supervisor evaluation under educational use terms.
-

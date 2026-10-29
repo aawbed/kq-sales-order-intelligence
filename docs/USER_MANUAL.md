@@ -122,7 +122,7 @@ The **Kenya Airways (KQ) Sales & Order Intelligence System** is an enterprise we
    - Reviewed alerts automatically move to the **Reviewed** tab and recalibrate model precision metrics.
 5. **K-Means RFM Customer Segmentation Table:**
    - Evaluates client Recency (days), Frequency (order count), and Monetary value (spend).
-   - Classifies accounts into tiers: *VIP/High-Volume*, *Loyal Regular*, and *At-Risk/Dormant*.
+   - Classifies accounts into 4 tiers: *VIP/High-Volume*, *Loyal Regular*, *Developing*, and *At-Risk/Dormant*.
 
 ### 5.2 Generating Reports (PDF & CSV Export)
 1. Select **Generate Reports** from the sidebar.
@@ -159,9 +159,9 @@ The **Kenya Airways (KQ) Sales & Order Intelligence System** is an enterprise we
 ### 5.4 ML Model Performance & Retraining
 1. Select **Model Performance** from the sidebar.
 2. Inspect validation metrics:
-   - **SARIMAX:** Mean Absolute Error (MAE), Root Mean Squared Error (RMSE), Mean Absolute Percentage Error (MAPE).
-   - **K-Means:** Silhouette Coefficient (-1 to +1 cluster separation), Inertia.
-   - **Isolation Forest:** Contamination rate, Flagged anomalies count, Review precision percentage.
+   - **SARIMAX `(1,1,1)(1,0,1,7)`:** Mean Absolute Error (MAE), 7-Day Seasonal Naive Baseline MAE, Root Mean Squared Error (RMSE), and 7-Day Rolling WMAPE.
+   - **K-Means (`k=4` + `StandardScaler`):** Silhouette Coefficient (-1 to +1 cluster separation) and Cluster Inertia.
+   - **Isolation Forest (`n_estimators=100` + `StandardScaler`):** Contamination rate, Flagged anomalies count, and Live Review Precision percentage.
 3. Click **Retrain Models** to trigger an on-demand re-fitting of models against the latest transactions.
 
 ---
